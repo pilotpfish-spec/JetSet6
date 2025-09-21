@@ -1,3 +1,4 @@
+import JetsetHero from "./_components/JetsetHero";
 import { infos } from "@/config/landing";
 import BentoGrid from "@/components/sections/bentogrid";
 import Features from "@/components/sections/features";
@@ -21,5 +22,6 @@ export default function IndexPage() {
     </>
   );
 }
+
 
 

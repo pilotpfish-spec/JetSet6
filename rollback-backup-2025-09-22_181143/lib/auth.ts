@@ -1,7 +1,7 @@
+// C:\JetSetNew6\lib\auth.ts
+import { PrismaAdapter } from "@auth/prisma-adapter";
 import type { NextAuthOptions } from "next-auth";
 import CredentialsProvider from "next-auth/providers/credentials";
-import GoogleProvider from "next-auth/providers/google";
-import { PrismaAdapter } from "@next-auth/prisma-adapter";
 import { compare } from "bcryptjs";
 
 import { prisma } from "@/lib/prisma";
@@ -9,10 +9,6 @@ import { prisma } from "@/lib/prisma";
 export const authOptions: NextAuthOptions = {
   adapter: PrismaAdapter(prisma),
   providers: [
-    GoogleProvider({
-      clientId: process.env.GOOGLE_CLIENT_ID as string,
-      clientSecret: process.env.GOOGLE_CLIENT_SECRET as string,
-    }),
     CredentialsProvider({
       name: "Credentials",
       credentials: {
@@ -20,37 +16,44 @@ export const authOptions: NextAuthOptions = {
         password: { label: "Password", type: "password" },
       },
       async authorize(credentials) {
-        if (!credentials?.email || !credentials?.password) return null;
+        if (!credentials?.email || !credentials?.password) {
+          throw new Error("Missing email or password");
+        }
 
         const user = await prisma.user.findUnique({
           where: { email: credentials.email },
         });
-        if (!user || !user.password) return null;
+
+        if (!user || !user.password) {
+          throw new Error("No user found");
+        }
 
         const isValid = await compare(credentials.password, user.password);
-        if (!isValid) return null;
+        if (!isValid) {
+          throw new Error("Invalid password");
+        }
 
         return user;
       },
     }),
   ],
   session: { strategy: "jwt" },
-  pages: {
-    signIn: "/login",
-  },
   callbacks: {
     async jwt({ token, user }) {
-      if (user) token.id = (user as any).id;
+      if (user) token.id = user.id;
       return token;
     },
     async session({ session, token }) {
       if (token?.id) {
-        (session.user as any) = {
+        session.user = {
           ...(session.user || {}),
           id: token.id as string,
         };
       }
       return session;
     },
+  },
+  pages: {
+    signIn: "/login",
   },
 };

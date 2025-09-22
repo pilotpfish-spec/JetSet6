@@ -1,11 +1,15 @@
-// C:\JetSetNew6\middleware.ts
-export { auth as middleware } from "next-auth/middleware";
+import { withAuth } from "next-auth/middleware";
 
-// Add which routes should be protected
+export default withAuth({
+  pages: {
+    signIn: "/login",
+  },
+});
+
 export const config = {
   matcher: [
-    "/account/:path*", // protect account pages
-    "/admin/:path*",   // protect admin pages
-    "/booking/:path*", // protect booking flow
+    "/account/:path*",
+    "/admin/:path*",
+    "/booking/:path*",
   ],
 };

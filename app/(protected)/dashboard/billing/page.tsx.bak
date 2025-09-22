@@ -1,6 +1,6 @@
 import { redirect } from "next/navigation";
 
-import { getUser } from "@/lib/session";
+import { getCurrentUser } from "@/lib/session";
 import { getUserSubscriptionPlan } from "@/lib/subscription";
 import { constructMetadata } from "@/lib/utils";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
@@ -14,7 +14,7 @@ export const metadata = constructMetadata({
 });
 
 export default async function BillingPage() {
-  const user = await getUser();
+  const user = await getCurrentUser();
 
   let userSubscriptionPlan;
   if (user && user.id && user.role === "USER") {
@@ -52,4 +52,3 @@ export default async function BillingPage() {
     </>
   );
 }
-

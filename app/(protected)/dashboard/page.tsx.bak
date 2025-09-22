@@ -1,4 +1,4 @@
-import { getUser } from "@/lib/session";
+import { getCurrentUser } from "@/lib/session";
 import { constructMetadata } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { DashboardHeader } from "@/components/dashboard/header";
@@ -10,7 +10,7 @@ export const metadata = constructMetadata({
 });
 
 export default async function DashboardPage() {
-  const user = await getUser();
+  const user = await getCurrentUser();
 
   return (
     <>
@@ -29,4 +29,3 @@ export default async function DashboardPage() {
     </>
   );
 }
-

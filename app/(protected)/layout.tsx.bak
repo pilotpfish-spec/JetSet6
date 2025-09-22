@@ -1,7 +1,7 @@
 import { redirect } from "next/navigation";
 
 import { sidebarLinks } from "@/config/dashboard";
-import { getUser } from "@/lib/session";
+import { getCurrentUser } from "@/lib/session";
 import { SearchCommand } from "@/components/dashboard/search-command";
 import {
   DashboardSidebar,
@@ -16,7 +16,7 @@ interface ProtectedLayoutProps {
 }
 
 export default async function Dashboard({ children }: ProtectedLayoutProps) {
-  const user = await getUser();
+  const user = await getCurrentUser();
 
   if (!user) redirect("/login");
 
@@ -54,4 +54,3 @@ export default async function Dashboard({ children }: ProtectedLayoutProps) {
     </div>
   );
 }
-

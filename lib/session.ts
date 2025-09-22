@@ -1,12 +1,14 @@
-import "server-only";
+// C:\JetSetNew6\lib\session.ts
+import { getServerSession } from "next-auth";
+import { authOptions } from "@/lib/auth";
 
-import { cache } from "react";
-import { auth } from "@/auth";
+// Get the full NextAuth session (or null if not logged in)
+export async function getSession() {
+  return await getServerSession(authOptions);
+}
 
-export const getCurrentUser = cache(async () => {
-  const session = await auth();
-  if (!session?.user) {
-    return undefined;
-  }
-  return session.user;
-});
+// Get just the user object (or null if not logged in)
+export async function getUser() {
+  const session = await getServerSession(authOptions);
+  return session?.user ?? null;
+}

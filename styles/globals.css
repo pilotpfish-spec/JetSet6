@@ -89,4 +89,43 @@
   -webkit-background-clip: text;
   -webkit-text-fill-color: transparent;
   background-clip: text;
+}/* === JetSet Direct Brand Theme === */
+:root {
+  --brand-navy: #0a1a2f;
+  --brand-white: #ffffff;
+  --brand-accent: #f5d547; /* subtle gold accent if needed */
+}
+
+body {
+  background-color: var(--brand-white);
+  color: var(--brand-navy);
+  font-family: 'Inter', sans-serif;
+}
+
+header {
+  background-color: var(--brand-navy);
+}
+
+footer {
+  background-color: var(--brand-navy);
+}
+/* === JetSet Direct Brand Theme === */
+:root {
+  --brand-navy: #0a1a2f;
+  --brand-white: #ffffff;
+  --brand-accent: #f5d547; /* subtle gold accent if needed */
+}
+
+body {
+  background-color: var(--brand-white);
+  color: var(--brand-navy);
+  font-family: 'Inter', sans-serif;
+}
+
+header {
+  background-color: var(--brand-navy);
+}
+
+footer {
+  background-color: var(--brand-navy);
 }

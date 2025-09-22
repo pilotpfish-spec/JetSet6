@@ -36,7 +36,15 @@ export default function RootLayout({ children }: RootLayoutProps) {
             enableSystem
             disableTransitionOnChange
           >
-            <ModalProvider>{children}</ModalProvider>
+            <ModalProvider>  {/* JetSet Direct Logo */}
+  <header className="flex items-center justify-center py-6">
+    <img
+      src="/logo.png"
+      alt="JetSet Direct"
+      className="h-12 w-auto"
+    />
+  </header>
+{children}</ModalProvider>
             <Analytics />
             <Toaster richColors closeButton />
             <TailwindIndicator />

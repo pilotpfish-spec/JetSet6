@@ -1,55 +1,66 @@
-import "@/styles/globals.css";
+import "../styles/globals.css";
+import { Inter } from "next/font/google";
+import Link from "next/link";
+import Image from "next/image";
+import Providers from "./providers"; // ✅ add this import
 
-import { fontGeist, fontHeading, fontSans, fontUrban } from "@/assets/fonts";
-import { SessionProvider } from "next-auth/react";
-import { ThemeProvider } from "next-themes";
+const inter = Inter({ subsets: ["latin"] });
 
-import { cn, constructMetadata } from "@/lib/utils";
-import { Toaster } from "@/components/ui/sonner";
-import { Analytics } from "@/components/analytics";
-import ModalProvider from "@/components/modals/providers";
-import { TailwindIndicator } from "@/components/tailwind-indicator";
+export const metadata = {
+  title: "JetSet Direct",
+  description: "Ground Service Elevated. The Reason We’re Taking Off.",
+};
 
-interface RootLayoutProps {
+export default function RootLayout({
+  children,
+}: {
   children: React.ReactNode;
-}
-
-export const metadata = constructMetadata();
-
-export default function RootLayout({ children }: RootLayoutProps) {
+}) {
   return (
-    <html lang="en" suppressHydrationWarning>
-      <head />
-      <body
-        className={cn(
-          "min-h-screen bg-background font-sans antialiased",
-          fontSans.variable,
-          fontUrban.variable,
-          fontHeading.variable,
-          fontGeist.variable,
-        )}
-      >
-        <SessionProvider>
-          <ThemeProvider
-            attribute="class"
-            defaultTheme="system"
-            enableSystem
-            disableTransitionOnChange
-          >
-            <ModalProvider>  {/* JetSet Direct Logo */}
-  <header className="flex items-center justify-center py-6">
-    <img
-      src="/logo.png"
-      alt="JetSet Direct"
-      className="h-12 w-auto"
-    />
-  </header>
-{children}</ModalProvider>
-            <Analytics />
-            <Toaster richColors closeButton />
-            <TailwindIndicator />
-          </ThemeProvider>
-        </SessionProvider>
+    <html lang="en">
+      <body className={inter.className}>
+        {/* Header */}
+        <header className="flex justify-between items-center px-8 py-4 bg-[#0a0a23] text-white">
+          <Link href="/" className="flex items-center space-x-3">
+            <Image
+              src="/logo.png"
+              alt="JetSet Direct Logo"
+              width={40}
+              height={40}
+              priority
+            />
+            <span className="text-2xl font-bold">JetSet Direct</span>
+          </Link>
+          <nav className="flex items-center space-x-6">
+            <Link
+              href="/booking"
+              className="px-4 py-2 rounded-lg bg-white text-[#0a0a23] font-semibold hover:bg-gray-200 transition"
+            >
+              Book Now
+            </Link>
+            <Link href="/about" className="hover:underline">
+              About
+            </Link>
+            <Link href="/contact" className="hover:underline">
+              Contact
+            </Link>
+            <Link href="/login" className="hover:underline">
+              Login
+            </Link>
+          </nav>
+        </header>
+
+        {/* Main content wrapped in Providers */}
+        <Providers>
+          <main>{children}</main>
+        </Providers>
+
+        {/* Footer */}
+        <footer className="mt-12 py-6 bg-[#0a0a23] text-white text-center">
+          <p className="text-sm">
+            © {new Date().getFullYear()} JetSet Direct
+          </p>
+        </footer>
       </body>
     </html>
   );

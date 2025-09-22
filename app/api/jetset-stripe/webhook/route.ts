@@ -11,6 +11,6 @@ export async function POST(req: Request) {
     // TODO: update DB on completed events
     return NextResponse.json({ received: true });
   } catch (err: any) {
-    return new NextResponse(Webhook Error: \, { status: 400 });
+    return new NextResponse("Webhook Error", { status: 400 });
   }
 }

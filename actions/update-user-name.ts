@@ -1,38 +1,44 @@
-"use server";
+"use server"
 
-import { auth } from "@/auth";
-import { prisma } from "@/lib/db";
-import { userNameSchema } from "@/lib/validations/user";
-import { revalidatePath } from "next/cache";
+import { revalidatePath } from "next/cache"
+import { auth } from "@/auth"
+import { prisma } from "@/lib/db"
+import { userNameSchema } from "@/lib/validations/user"
 
 export type FormData = {
-  name: string;
-};
+  name: string
+}
 
-export async function updateUserName(userId: string, data: FormData) {
+export async function updateUserName(
+  userId: string,
+  data: FormData
+): Promise<{ status: "success" | "error" }> {
   try {
-    const session = await auth()
-
-    if (!session?.user || session?.user.id !== userId) {
-      throw new Error("Unauthorized");
+    // Validate input against schema
+    const parsed = userNameSchema.safeParse(data)
+    if (!parsed.success) {
+      return { status: "error" }
     }
 
-    const { name } = userNameSchema.parse(data);
+    // Check session
+    const session = await auth()
+    if (!session?.user?.id || session.user.id !== userId) {
+      return { status: "error" }
+    }
 
-    // Update the user name.
+    // Update user
     await prisma.user.update({
-      where: {
-        id: userId,
-      },
-      data: {
-        name: name,
-      },
+      where: { id: userId },
+      data: { name: parsed.data.name },
     })
 
-    revalidatePath('/dashboard/settings');
-    return { status: "success" };
-  } catch (error) {
-    // console.log(error)
+    // Revalidate any pages showing user info
+    revalidatePath("/dashboard")
+    revalidatePath("/settings")
+
+    return { status: "success" }
+  } catch (err) {
+    console.error("❌ updateUserName error:", err)
     return { status: "error" }
   }
 }

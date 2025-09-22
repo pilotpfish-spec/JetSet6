@@ -1,10 +1,13 @@
-import { UserRole } from "@prisma/client";
-import * as z from "zod";
+// C:\JetSetNew6\lib\validations\user.ts
 
-export const userNameSchema = z.object({
-  name: z.string().min(3).max(32),
-});
+import * as z from "zod"
 
+// Validation for updating user role
 export const userRoleSchema = z.object({
-  role: z.nativeEnum(UserRole),
-});
+  role: z.enum(["USER", "ADMIN"]),
+})
+
+// Validation for updating user name
+export const userNameSchema = z.object({
+  name: z.string().min(1, "Name is required").max(50, "Name too long"),
+})

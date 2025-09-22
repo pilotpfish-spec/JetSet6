@@ -10,5 +10,4 @@ export const prisma =
 
 if (process.env.NODE_ENV !== "production") globalForPrisma.prisma = prisma;
 
-// ✅ Export UserRole enum so it can be imported
-export { UserRole } from "@prisma/client";
+export default prisma;

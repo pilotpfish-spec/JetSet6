@@ -35,7 +35,7 @@ export default function JetsetHero() {
   }, []);
 
   return (
-    <section className="relative flex items-center justify-center text-center min-h-[70vh] overflow-hidden">
+    <section className="relative flex h-screen flex-col items-center justify-center text-center text-white">
       {/* Background slideshow */}
       {heroImages.map((src, i) => (
         <div
@@ -52,15 +52,15 @@ export default function JetsetHero() {
       ))}
 
       {/* Overlay */}
-      <div className="absolute inset-0 bg-black bg-opacity-40 backdrop-blur-sm"></div>
+      <div className="absolute inset-0 bg-black/40"></div>
 
       {/* Copy */}
-      <div className="relative z-10 max-w-3xl px-6 py-12 text-white">
-        <h1 className="text-5xl font-bold mb-4">Ground Service Elevated</h1>
-        <p className="text-xl mb-2">
+      <div className="relative z-10">
+        <h1 className="mb-4 text-4xl font-bold md:text-6xl">Ground Service Elevated</h1>
+        <p className="mb-2 text-lg md:text-2xl">
           Premium airport transfers to and from DFW &amp; Love Field.
         </p>
-        <p className="text-sm opacity-85">The Reason We’re Taking Off.</p>
+        <p className="text-lg md:text-2xl">The Reason We’re Taking Off.</p>
       </div>
     </section>
   );

@@ -1,44 +1,36 @@
-"use server"
+"use server";
 
-import { revalidatePath } from "next/cache"
-import { auth } from "@/auth"
-import { prisma } from "@/lib/db"
-import { userNameSchema } from "@/lib/validations/user"
+/* eslint-disable @typescript-eslint/no-explicit-any */
 
-export type FormData = {
-  name: string
-}
+import { getServerSession } from "next-auth/next";
+import { authOptions } from "@/lib/auth";
+import type { Session } from "next-auth";
+import { prisma } from "@/lib/prisma";
 
-export async function updateUserName(
-  userId: string,
-  data: FormData
-): Promise<{ status: "success" | "error" }> {
+export type ResponseAction = { status: "success" | "error" };
+
+type MinimalUser = { id?: string; email?: string | null } | null | undefined;
+
+export async function updateUserName(userId: string, name: string): Promise<ResponseAction> {
+  const raw = await getServerSession(authOptions);
+  const session = raw as any as
+    | (Session & { user?: MinimalUser })
+    | { user?: MinimalUser }
+    | null;
+
+  const user = session?.user as MinimalUser;
+
+  if (!user?.id || user.id !== userId) {
+    return { status: "error" };
+  }
+
   try {
-    // Validate input against schema
-    const parsed = userNameSchema.safeParse(data)
-    if (!parsed.success) {
-      return { status: "error" }
-    }
-
-    // Check session
-    const session = await auth()
-    if (!session?.user?.id || session.user.id !== userId) {
-      return { status: "error" }
-    }
-
-    // Update user
     await prisma.user.update({
       where: { id: userId },
-      data: { name: parsed.data.name },
-    })
-
-    // Revalidate any pages showing user info
-    revalidatePath("/dashboard")
-    revalidatePath("/settings")
-
-    return { status: "success" }
-  } catch (err) {
-    console.error("❌ updateUserName error:", err)
-    return { status: "error" }
+      data: { name },
+    });
+    return { status: "success" };
+  } catch {
+    return { status: "error" };
   }
 }

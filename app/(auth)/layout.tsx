@@ -1,6 +1,6 @@
 // C:\JetSetNew6\app\(auth)\layout.tsx
 import { redirect } from "next/navigation";
-import { getServerSession } from "next-auth";
+import { getServerSession } from "next-auth/next";
 import { authOptions } from "@/lib/auth";
 import type { Session } from "next-auth";
 type MinimalUser = { id?: string; email?: string | null; name?: string | null; image?: string | null; role?: string } | null | undefined;
@@ -23,3 +23,4 @@ const user = session?.user as MinimalUser;
 
   return <div className="min-h-screen">{children}</div>;
 }
+

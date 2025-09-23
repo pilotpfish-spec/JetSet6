@@ -1,41 +1,47 @@
 "use server";
 
-import { redirect } from "next/navigation";
-import { auth } from "@/auth";
+/* eslint-disable @typescript-eslint/no-explicit-any */
 
+import { getServerSession } from "next-auth/next";
+import { authOptions } from "@/lib/auth";
 import { stripe } from "@/lib/stripe";
+import { getUserSubscriptionPlan } from "@/lib/subscription";
 import { absoluteUrl } from "@/lib/utils";
+import { redirect } from "next/navigation";
+import type { Session } from "next-auth";
 
 export type responseAction = {
   status: "success" | "error";
   stripeUrl?: string;
 };
 
-const billingUrl = absoluteUrl("/dashboard/billing");
+const returnUrl = absoluteUrl("/pricing");
 
-export async function openCustomerPortal(
-  userStripeId: string,
-): Promise<responseAction> {
-  let redirectUrl: string = "";
+type MinimalUser = { id?: string; email?: string | null } | null | undefined;
 
-  try {
-    const session = await auth();
+export async function openCustomerPortal(): Promise<responseAction> {
+  const raw = await getServerSession(authOptions);
+  const session = raw as any as
+    | (Session & { user?: MinimalUser })
+    | { user?: MinimalUser }
+    | null;
 
-    if (!session?.user || !session?.user.email) {
-      throw new Error("Unauthorized");
-    }
+  const user = session?.user as MinimalUser;
 
-    if (userStripeId) {
-      const stripeSession = await stripe.billingPortal.sessions.create({
-        customer: userStripeId,
-        return_url: billingUrl,
-      });
-
-      redirectUrl = stripeSession.url as string;
-    }
-  } catch (error) {
-    throw new Error("Failed to generate user stripe session");
+  if (!user?.id || !user?.email) {
+    throw new Error("Unauthorized");
   }
 
-  redirect(redirectUrl);
+  const plan = await getUserSubscriptionPlan(user.id);
+
+  if (!plan?.stripeCustomerId) {
+    redirect(returnUrl);
+  }
+
+  const portal = await stripe.billingPortal.sessions.create({
+    customer: plan.stripeCustomerId as string,
+    return_url: returnUrl,
+  });
+
+  redirect(portal.url ?? returnUrl);
 }

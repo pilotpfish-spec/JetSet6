@@ -19,3 +19,6 @@ export async function getCurrentUser(): Promise<MinimalUser> {
 
   return (session?.user ?? null) as MinimalUser;
 }
+
+// Alias for legacy imports
+export const getUser = getCurrentUser;

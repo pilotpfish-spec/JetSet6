@@ -1,38 +1,35 @@
 "use server";
 
-import { revalidatePath } from "next/cache";
-import { auth } from "@/auth";
-import { prisma, UserRole } from "@/lib/db";
-import { userRoleSchema } from "@/lib/validations/user";
+/* eslint-disable @typescript-eslint/no-explicit-any */
 
-export type FormData = {
-  role: "USER" | "ADMIN";
-};
+import { getServerSession } from "next-auth/next";
+import type { Session } from "next-auth";
+import { authOptions } from "@/lib/auth";
+import { prisma } from "@/lib/prisma";
 
-export async function updateUserRole(
-  userId: string,
-  data: FormData
-): Promise<{ status: "success" | "error" }> {
+export type ResponseAction = { status: "success" | "error" };
+
+type MaybeRoleUser = { role?: string | null } | null | undefined;
+
+export async function updateUserRole(userId: string, role: string): Promise<ResponseAction> {
+  const raw = await getServerSession(authOptions);
+  const session = raw as any as
+    | (Session & { user?: MaybeRoleUser })
+    | { user?: MaybeRoleUser }
+    | null;
+
+  const currentRole = (session?.user as MaybeRoleUser)?.role ?? null;
+  if (currentRole !== "ADMIN") {
+    return { status: "error" };
+  }
+
   try {
-    const session = await auth();
-
-    if (!session || session.user.role !== "ADMIN") {
-      return { status: "error" };
-    }
-
-    const validatedData = userRoleSchema.parse(data);
-
     await prisma.user.update({
       where: { id: userId },
-      data: {
-        role: validatedData.role as UserRole,
-      },
+      data: { role },
     });
-
-    revalidatePath("/admin");
     return { status: "success" };
-  } catch (error) {
-    console.error("Error updating user role:", error);
+  } catch {
     return { status: "error" };
   }
 }

@@ -1,6 +1,6 @@
 import { getServerSession } from "next-auth/next";
 import { authOptions } from "@/lib/auth";
-import type { Session } from "next-auth/next";
+import type { Session } from "next-auth";
 import { prisma } from "@/lib/prisma";
 
 // minimal user shape we rely on

@@ -4,7 +4,7 @@
 
 import { getServerSession } from "next-auth/next";
 import { authOptions } from "@/lib/auth";
-import type { Session } from "next-auth";
+import type { Session } from "next-auth/next";
 import { prisma } from "@/lib/prisma";
 
 export type ResponseAction = { status: "success" | "error" };

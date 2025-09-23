@@ -1,0 +1,35 @@
+
+> saas-starter@0.3.1 build C:\JetSetNew6
+> next build
+
+  Γû▓ Next.js 14.2.5
+  - Environments: .env.local, .env
+
+   Creating an optimized production build ...
+Warning: Contentlayer might not work as expected on Windows
+Generated 20 documents in .contentlayer
+Failed to compile.
+
+./actions/generate-user-stripe.ts
+Error: 
+  x Expected ';', '}' or <eof>
+   ,-[C:\JetSetNew6\actions\generate-user-stripe.ts:1:1]
+ 1 | # Location: C:\JetSetNew6
+   : ^^^^^|^^^^^
+   :      `-- This is the expression part of an expression statement
+ 2 | 
+ 3 | # 1. Target file
+ 3 | $file = "C:\JetSetNew6\actions\generate-user-stripe.ts"
+   `----
+
+Caused by:
+    Syntax Error
+
+Import trace for requested module:
+./actions/generate-user-stripe.ts
+./components/forms/billing-form-button.tsx
+./components/pricing/pricing-cards.tsx
+
+
+> Build failed because of webpack errors
+ΓÇëELIFECYCLEΓÇë Command failed with exit code 1.

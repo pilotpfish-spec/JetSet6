@@ -10,7 +10,7 @@ Copy-Item $file $backup
 Write-Host "📦 Backup created at $backup"
 
 # 3. Replace import
-(Get-Content $file) -replace 'from "next-auth/next";', 'from "next-auth/next";' | 
+(Get-Content $file) -replace 'from "next-auth";', 'from "next-auth/next";' | 
     Set-Content $file -Encoding UTF8
 
 Write-Host "✅ Patched import to use next-auth/next"

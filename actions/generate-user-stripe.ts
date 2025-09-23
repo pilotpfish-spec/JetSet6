@@ -1,11 +1,14 @@
 "use server";
 
+/* eslint-disable @typescript-eslint/no-explicit-any */
+
 import { getServerSession } from "next-auth/next";
 import { authOptions } from "@/lib/auth";
 import { stripe } from "@/lib/stripe";
 import { getUserSubscriptionPlan } from "@/lib/subscription";
 import { absoluteUrl } from "@/lib/utils";
 import { redirect } from "next/navigation";
+import type { Session } from "next-auth";
 
 export type responseAction = {
   status: "success" | "error";
@@ -14,42 +17,43 @@ export type responseAction = {
 
 const billingUrl = absoluteUrl("/pricing");
 
+type MinimalUser = { id?: string; email?: string | null } | null | undefined;
+
 export async function generateUserStripe(priceId: string): Promise<responseAction> {
-  let redirectUrl: string = "";
+  let redirectUrl = "";
 
-  try {
-    const session = await getServerSession(authOptions);
-    const user = session?.user;
+  const raw = await getServerSession(authOptions);
+  const session = raw as any as
+    | (Session & { user?: MinimalUser })
+    | { user?: MinimalUser }
+    | null;
 
-    if (!user || !user.email || !user.id) {
-      throw new Error("Unauthorized");
-    }
+  const user = session?.user as MinimalUser;
 
-    const subscriptionPlan = await getUserSubscriptionPlan(user.id);
+  if (!user?.id || !user?.email) {
+    throw new Error("Unauthorized");
+  }
 
-    if (subscriptionPlan.isPaid && subscriptionPlan.stripeCustomerId) {
-      // Paid plan → Stripe portal
-      const stripeSession = await stripe.billingPortal.sessions.create({
-        customer: subscriptionPlan.stripeCustomerId,
-        return_url: billingUrl,
-      });
-      redirectUrl = stripeSession.url as string;
-    } else {
-      // Free plan → Stripe checkout
-      const stripeSession = await stripe.checkout.sessions.create({
-        success_url: billingUrl,
-        cancel_url: billingUrl,
-        payment_method_types: ["card"],
-        mode: "subscription",
-        billing_address_collection: "auto",
-        customer_email: user.email,
-        line_items: [{ price: priceId, quantity: 1 }],
-        metadata: { userId: user.id },
-      });
-      redirectUrl = stripeSession.url as string;
-    }
-  } catch (error) {
-    throw new Error("Failed to generate user stripe session");
+  const subscriptionPlan = await getUserSubscriptionPlan(user.id);
+
+  if (subscriptionPlan.isPaid && subscriptionPlan.stripeCustomerId) {
+    const portal = await stripe.billingPortal.sessions.create({
+      customer: subscriptionPlan.stripeCustomerId,
+      return_url: billingUrl,
+    });
+    redirectUrl = portal.url ?? billingUrl;
+  } else {
+    const checkout = await stripe.checkout.sessions.create({
+      success_url: billingUrl,
+      cancel_url: billingUrl,
+      payment_method_types: ["card"],
+      mode: "subscription",
+      billing_address_collection: "auto",
+      customer_email: user.email ?? undefined,
+      line_items: [{ price: priceId, quantity: 1 }],
+      metadata: { userId: user.id! },
+    });
+    redirectUrl = checkout.url ?? billingUrl;
   }
 
   redirect(redirectUrl);

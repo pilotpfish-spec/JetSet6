@@ -5,7 +5,7 @@
 import { getServerSession } from "next-auth/next";
 import type { Session } from "next-auth";
 import { authOptions } from "@/lib/auth";
-import { prisma } from "@/lib/prisma";\r
+import { prisma } from "@/lib/prisma";
 import type { UserRole } from "@prisma/client";
 
 export type ResponseAction = { status: "success" | "error" };
@@ -25,6 +25,7 @@ export async function updateUserRole(userId: string, role: string): Promise<Resp
   }
 
   try {
+    // Cast the incoming string to the Prisma enum (avoids breaking callers)
     await prisma.user.update({
       where: { id: userId },
       data: { role: role as UserRole },
@@ -34,4 +35,3 @@ export async function updateUserRole(userId: string, role: string): Promise<Resp
     return { status: "error" };
   }
 }
-

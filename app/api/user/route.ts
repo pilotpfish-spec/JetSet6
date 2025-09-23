@@ -1,9 +1,3 @@
-# Location: C:\JetSetNew6
-$target = "C:\JetSetNew6\app\api\user\route.ts"
-$ts = Get-Date -Format "yyyyMMdd_HHmmss"
-if (Test-Path $target) { Copy-Item $target "$target.bak-$ts" -Force }
-
-@'
 import { getServerSession } from "next-auth/next";
 import { authOptions } from "@/lib/auth";
 import type { Session } from "next-auth";
@@ -33,4 +27,3 @@ export async function DELETE() {
     return new Response("Internal server error", { status: 500 });
   }
 }
-'@ | Set-Content $target -Encoding UTF8

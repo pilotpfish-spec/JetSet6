@@ -1,8 +1,3 @@
-$target = "C:\JetSetNew6\lib\session.ts"
-$ts = Get-Date -Format "yyyyMMdd_HHmmss"
-if (Test-Path $target) { Copy-Item $target "$target.bak-$ts" -Force }
-
-@'
 import { getServerSession } from "next-auth/next";
 import { authOptions } from "@/lib/auth";
 import type { Session } from "next-auth";
@@ -24,4 +19,3 @@ export async function getCurrentUser(): Promise<MinimalUser> {
 
   return (session?.user ?? null) as MinimalUser;
 }
-'@ | Set-Content $target -Encoding UTF8

@@ -16,7 +16,7 @@ export const metadata = constructMetadata({
 export default async function PricingPage() {
   const user = await getUser();
 
-  if (user?.role === "ADMIN") {
+  if ((user as any)?.role === "ADMIN") {
     return (
       <div className="flex min-h-screen flex-col items-center justify-center">
         <h1 className="text-5xl font-bold">Seriously?</h1>
@@ -55,4 +55,5 @@ export default async function PricingPage() {
     </div>
   );
 }
+
 

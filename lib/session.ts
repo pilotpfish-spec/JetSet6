@@ -1,18 +1,22 @@
 import { getServerSession } from "next-auth/next";
-import { authOptions } from "@/lib/auth";
 import type { Session } from "next-auth";
+import { authOptions } from "@/lib/auth";
 
-// Keep return shape the same as before (user or null)
-type MinimalUser = {
+/**
+ * Narrow user shape used across the app.
+ * NOTE: "role" is optional and string-widened so we don't block on enum wiring.
+ */
+export type MinimalUser = {
   id?: string;
   email?: string | null;
   name?: string | null;
   image?: string | null;
+  role?: string | null; // <- important: allow user?.role
 } | null;
 
 export async function getCurrentUser(): Promise<MinimalUser> {
   const raw = await getServerSession(authOptions);
-  const session = (raw as unknown) as
+  const session = raw as unknown as
     | (Session & { user?: MinimalUser })
     | { user?: MinimalUser }
     | null;
@@ -20,5 +24,5 @@ export async function getCurrentUser(): Promise<MinimalUser> {
   return (session?.user ?? null) as MinimalUser;
 }
 
-// Alias for legacy imports
+// Back-compat alias used throughout the app
 export const getUser = getCurrentUser;

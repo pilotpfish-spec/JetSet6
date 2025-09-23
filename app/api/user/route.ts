@@ -1,26 +1,33 @@
-import { auth } from "@/auth";
+// C:\JetSetNew6\app\api\user\route.ts
+import { NextResponse } from "next/server";
+import prisma from "@/lib/prisma";
+import { getServerSession } from "next-auth";
+import { authOptions } from "@/lib/auth";
 
-import { prisma } from "@/lib/db";
-
-export const DELETE = auth(async (req) => {
-  if (!req.auth) {
-    return new Response("Not authenticated", { status: 401 });
-  }
-
-  const currentUser = req.auth.user;
-  if (!currentUser) {
-    return new Response("Invalid user", { status: 401 });
-  }
-
+export async function DELETE(req: Request) {
   try {
-    await prisma.user.delete({
-      where: {
-        id: currentUser.id,
-      },
-    });
-  } catch (error) {
-    return new Response("Internal server error", { status: 500 });
-  }
+    const session = await getServerSession(authOptions);
 
-  return new Response("User deleted successfully!", { status: 200 });
-});
+    if (!session?.user?.id) {
+      return NextResponse.json(
+        { error: "Unauthorized" },
+        { status: 401 }
+      );
+    }
+
+    await prisma.user.delete({
+      where: { id: session.user.id },
+    });
+
+    return NextResponse.json(
+      { message: "User deleted successfully!" },
+      { status: 200 }
+    );
+  } catch (error) {
+    console.error("DELETE /api/user error:", error);
+    return NextResponse.json(
+      { error: "Internal server error" },
+      { status: 500 }
+    );
+  }
+}

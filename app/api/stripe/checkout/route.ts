@@ -1,79 +1,68 @@
 // app/api/stripe/checkout/route.ts
 import { NextResponse } from "next/server";
-import Stripe from "stripe";
 
 export const runtime = "nodejs";
-export const dynamic = "force-dynamic"; // don't cache this route
-
-const stripeKey = process.env.STRIPE_SECRET_KEY;
-const appUrl = process.env.NEXT_PUBLIC_APP_URL || "https://jetsetdirect.com";
-
-if (!stripeKey) {
-  // Log once when the function is cold-started
-  console.error("[Stripe] STRIPE_SECRET_KEY is missing in env");
-}
-
-const stripe = stripeKey
-  ? new Stripe(stripeKey, { apiVersion: "2024-06-20" })
-  : null;
+export const dynamic = "force-dynamic";
 
 export async function POST(req: Request) {
   try {
-    if (!stripe) {
-      throw new Error("Stripe is not configured (missing STRIPE_SECRET_KEY).");
+    const { unitAmount, priceId, bookingId, email } = await req.json();
+
+    const key = process.env.STRIPE_SECRET_KEY || process.env.STRIPE_API_KEY;
+    if (!key) {
+      console.error("Stripe key missing");
+      return NextResponse.json({ error: "Stripe not configured" }, { status: 500 });
     }
 
-    const body = await req.json().catch(() => ({} as any));
-    const { priceId, unitAmount, bookingId, email } = body || {};
+    const Stripe = (await import("stripe")).default;
+    const stripe = new Stripe(key, { apiVersion: "2024-06-20" });
 
-    // You must provide either a priceId OR a unitAmount (>= 50 cents)
-    const hasValidUnitAmount =
-      Number.isInteger(unitAmount) && Number(unitAmount) >= 50;
+    const origin =
+      process.env.NEXT_PUBLIC_APP_URL ||
+      (typeof req.headers.get === "function" ? `${new URL(req.url).origin}` : "http://localhost:3000");
 
-    if (!priceId && !hasValidUnitAmount) {
-      throw new Error("Missing priceId or unitAmount (>= 50 cents).");
-    }
+    const successUrl = `${origin}/checkout/success?bookingId=${encodeURIComponent(
+      bookingId || ""
+    )}`;
+    const cancelUrl = `${origin}/booking`;
 
-    const lineItems =
-      priceId
-        ? [{ price: String(priceId), quantity: 1 }]
-        : [{
+    let session;
+    if (priceId) {
+      session = await stripe.checkout.sessions.create({
+        mode: "payment",
+        customer_email: email,
+        line_items: [{ price: priceId, quantity: 1 }],
+        success_url: successUrl,
+        cancel_url: cancelUrl,
+        metadata: { bookingId: bookingId || "" },
+      });
+    } else {
+      const cents = Number(unitAmount);
+      if (!Number.isFinite(cents) || cents < 50) {
+        return NextResponse.json({ error: "Invalid unitAmount" }, { status: 400 });
+      }
+      session = await stripe.checkout.sessions.create({
+        mode: "payment",
+        customer_email: email,
+        line_items: [
+          {
             price_data: {
               currency: "usd",
-              unit_amount: Number(unitAmount),
-              product_data: { name: "JetSet Direct Ride" },
+              product_data: { name: "JetSet Ride" },
+              unit_amount: Math.round(cents),
             },
             quantity: 1,
-          }];
-
-    const session = await stripe.checkout.sessions.create({
-      mode: "payment",
-      payment_method_types: ["card"],
-      customer_email: email || undefined,
-      line_items: lineItems,
-      metadata: {
-        bookingId: bookingId || "",
-        env: process.env.VERCEL_ENV || "unknown",
-      },
-      success_url: `${appUrl}/checkout/success?session_id={CHECKOUT_SESSION_ID}`,
-      cancel_url: `${appUrl}/quote?canceled=1`,
-    });
-
-    if (!session.url) {
-      throw new Error("Stripe returned no checkout URL.");
+          },
+        ],
+        success_url: successUrl,
+        cancel_url: cancelUrl,
+        metadata: { bookingId: bookingId || "" },
+      });
     }
 
     return NextResponse.json({ url: session.url });
   } catch (err: any) {
-    // Full error in server logs
-    console.error("[/api/stripe/checkout] ERROR:", err);
-
-    // Human-readable message back to browser
-    const msg =
-      err?.raw?.message || // Stripe error object shape
-      err?.message ||
-      "Checkout failed";
-
-    return NextResponse.json({ error: msg }, { status: 400 });
+    console.error("Checkout error:", err?.message || err);
+    return NextResponse.json({ error: "Internal error" }, { status: 500 });
   }
 }

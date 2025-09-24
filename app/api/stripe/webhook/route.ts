@@ -1,36 +1,51 @@
+// app/api/stripe/webhook/route.ts
 import { NextResponse } from "next/server";
-import Stripe from "stripe";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
-const stripe = new Stripe(process.env.STRIPE_SECRET_KEY!, { apiVersion: "2024-06-20" });
-const endpointSecret = process.env.STRIPE_WEBHOOK_SECRET!;
-
 export async function POST(req: Request) {
-  let event: Stripe.Event;
+  const sig = (req.headers as any).get("stripe-signature") as string | null;
+
+  const secret = process.env.STRIPE_WEBHOOK_SECRET;
+  const key = process.env.STRIPE_SECRET_KEY || process.env.STRIPE_API_KEY;
+
+  // Don’t crash the build if envs are missing; just no-op at runtime.
+  if (!secret || !key) {
+    console.error("Stripe webhook not configured (missing STRIPE_WEBHOOK_SECRET or key)");
+    return new NextResponse(null, { status: 200 }); // ack to avoid retries while you wire envs
+  }
+
+  const Stripe = (await import("stripe")).default;
+  const stripe = new Stripe(key, { apiVersion: "2024-06-20" });
+
+  const rawBody = await req.text();
+
+  let event;
   try {
-    const payload = await req.text();
-    const sig = req.headers.get("stripe-signature")!;
-    event = stripe.webhooks.constructEvent(payload, sig, endpointSecret);
+    event = stripe.webhooks.constructEvent(rawBody, sig!, secret);
   } catch (err: any) {
-    console.error("[webhook] signature verify failed:", err?.message);
-    return new NextResponse(`Webhook Error: ${err.message}`, { status: 400 });
+    console.error("Webhook signature verify failed:", err?.message || err);
+    return NextResponse.json({ error: "Invalid signature" }, { status: 400 });
   }
 
   try {
     if (event.type === "checkout.session.completed") {
-      const session = event.data.object as Stripe.Checkout.Session;
-      const bookingId = (session.metadata?.bookingId ?? "").toString();
-      const amountTotal = session.amount_total ?? 0;
+      const session = event.data.object as any;
+      const bookingId = session?.metadata?.bookingId as string | undefined;
 
-      // TODO: mark booking as paid in your DB using bookingId
-      console.log("[webhook] paid:", { bookingId, amountTotal, sessionId: session.id });
+      // TODO: mark booking paid in DB (if you want to finalize here)
+      // await prisma.booking.update({ where: { id: bookingId }, data: { status: "CONFIRMED", stripeId: session.id } })
+
+      console.log("Checkout completed", { sessionId: session.id, bookingId });
     }
 
-    return NextResponse.json({ received: true });
+    return new NextResponse(null, { status: 200 });
   } catch (err: any) {
-    console.error("[webhook] handler error:", err);
-    return new NextResponse("Webhook handler error", { status: 500 });
+    console.error("Webhook handler error:", err?.message || err);
+    return NextResponse.json({ error: "Webhook error" }, { status: 500 });
   }
 }
+
+// Stripe sends JSON but we must read the raw body for signature verification.
+// Next.js already provides the raw text via req.text(), so no extra body parser config needed here.

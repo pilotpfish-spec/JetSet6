@@ -20,7 +20,7 @@ export default function ContactPage() {
           <p>
             <span className="font-semibold">Email:</span>{" "}
             <a
-              href="mailto:patrick@jetset.com"
+              href="mailto:patrick@jetsetdirect.com"
               className="hover:underline"
             >
               patrick@jetset.com

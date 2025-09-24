@@ -1,3 +1,5 @@
+// prisma/schema.prisma
+
 generator client {
   provider = "prisma-client-js"
 }
@@ -7,55 +9,45 @@ datasource db {
   url      = env("DATABASE_URL")
 }
 
-enum UserRole {
-  USER
-  ADMIN
-}
-
-enum BookingStatus {
-  PENDING
-  CONFIRMED
-  CANCELLED
-}
+// ===========================
+// Models
+// ===========================
 
 model User {
-  id                  String    @id @default(cuid())
-  name                String?
-  email               String?   @unique
-  emailVerified       DateTime?
-  image               String?
-
-  // Needed for Credentials login
-  password            String?   // bcrypt-hashed password
-
-  // Stripe fields
+  id                     String    @id @default(cuid())
+  name                   String?
+  email                  String?   @unique
+  emailVerified          DateTime?
+  image                  String?
   stripeCustomerId       String?   @unique
   stripeSubscriptionId   String?   @unique
   stripePriceId          String?
   stripeCurrentPeriodEnd DateTime?
+  role                   UserRole  @default(USER)
+  password               String?
 
-  role UserRole @default(USER)
-
-  accounts Account[]
-  sessions Session[]
-  bookings Booking[]
+  // Relations
+  accounts               Account[]
+  bookings               Booking[]
+  sessions               Session[]
+  addresses              Address[]   // NEW: saved addresses
 }
 
 model Account {
-  id                 String  @id @default(cuid())
-  userId             String
-  type               String
-  provider           String
-  providerAccountId  String
-  refresh_token      String?  @db.Text
-  access_token       String?  @db.Text
-  expires_at         Int?
-  token_type         String?
-  scope              String?
-  id_token           String?  @db.Text
-  session_state      String?
+  id                String  @id @default(cuid())
+  userId            String
+  type              String
+  provider          String
+  providerAccountId String
+  refresh_token     String?
+  access_token      String?
+  expires_at        Int?
+  token_type        String?
+  scope             String?
+  id_token          String?
+  session_state     String?
 
-  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  user              User    @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@unique([provider, providerAccountId])
 }
@@ -66,19 +58,58 @@ model Session {
   userId       String
   expires      DateTime
 
-  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
 }
 
 model Booking {
-  id        String   @id @default(cuid())
-  userId    String
-  date      DateTime
-  status    BookingStatus @default(PENDING)
-
-  // Stripe linkage
-  stripeId               String?   @unique
+  id                     String        @id @default(cuid())
+  userId                 String
+  date                   DateTime
+  status                 BookingStatus @default(PENDING)
+  stripeId               String?       @unique
   stripePriceId          String?
   stripeCurrentPeriodEnd DateTime?
 
-  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  // Relation
+  user                   User          @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  // Optional fields for richer receipts/history
+  pickupAddress          String?
+  dropoffAddress         String?
+  totalCents             Int?          // fare in cents
+  receiptUrl             String?       // Stripe hosted receipt URL
+  notes                  String?
+}
+
+model Address {
+  id         String   @id @default(cuid())
+  userId     String
+  label      String              // e.g. "Home", "Office"
+  line1      String
+  line2      String?
+  city       String
+  state      String
+  postalCode String
+  isDefault  Boolean  @default(false)
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  user       User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+}
+
+// ===========================
+// Enums
+// ===========================
+
+enum UserRole {
+  USER
+  ADMIN
+}
+
+enum BookingStatus {
+  PENDING
+  CONFIRMED
+  CANCELLED
 }

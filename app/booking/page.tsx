@@ -2,7 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import Script from "next/script";
-import { useSession } from "next-auth/react";
+import { useSession, signIn } from "next-auth/react";
 import { useRouter } from "next/navigation";
 
 declare global {
@@ -21,13 +21,22 @@ const JETSET_YELLOW = "#FFD700";
 // ✅ Coordinates for airports and terminals
 const TERMINALS: Record<string, { name: string; lat: number; lng: number }> = {
   "DFW-A": { name: "DFW Terminal A", lat: 32.8998, lng: -97.0403 },
-  "DFW-B": { name: "DFW Terminal B", lat: 32.8990, lng: -97.0526 },
-  "DFW-C": { name: "DFW Terminal C", lat: 32.8968, lng: -97.0370 },
+  "DFW-B": { name: "DFW Terminal B", lat: 32.899, lng: -97.0526 },
+  "DFW-C": { name: "DFW Terminal C", lat: 32.8968, lng: -97.037 },
   "DFW-D": { name: "DFW Terminal D", lat: 32.8975, lng: -97.0404 },
   "DFW-E": { name: "DFW Terminal E", lat: 32.9011, lng: -97.0425 },
-  "DFW-Rental": { name: "DFW Rental Car Return", lat: 32.8626, lng: -97.0370 },
-  "DAL": { name: "Dallas Love Field", lat: 32.8471, lng: -96.8517 },
+  "DFW-Rental": { name: "DFW Rental Car Return", lat: 32.8626, lng: -97.037 },
+  DAL: { name: "Dallas Love Field", lat: 32.8471, lng: -96.8517 },
 };
+
+// --- tiny fare helper so we always have a number to send to Stripe ---
+function calcFareCents(miles: number): number {
+  const base = 45; // USD
+  const extraMiles = Math.max(0, miles - 20);
+  const extra = extraMiles * 1.5; // USD per mile
+  const total = base + extra; // traffic surcharge currently 0
+  return Math.round(total * 100);
+}
 
 function AddressAutocomplete(props: {
   id: string;
@@ -123,6 +132,7 @@ export default function BookingPage() {
   const [rideDate, setRideDate] = useState<string>("");
   const [rideTime, setRideTime] = useState<string>("");
   const [error, setError] = useState<string | null>(null);
+  const [quoteReady, setQuoteReady] = useState<boolean>(false);
 
   useEffect(() => {
     window.initJetSetPlaces = () => {
@@ -154,14 +164,8 @@ export default function BookingPage() {
     return null;
   };
 
-  const handleQuote = () => {
-    const problem = validateForQuote();
-    if (problem) {
-      setError(problem);
-      return;
-    }
-    setError(null);
-
+  // Build origin/destination based on tripType
+  const getOD = () => {
     let origin: any;
     let destination: any;
 
@@ -175,41 +179,120 @@ export default function BookingPage() {
       origin = pickup?.latLng ?? {};
       destination = dropoff?.latLng ?? {};
     }
+    return { origin, destination };
+  };
 
-    if (!window.google?.maps?.DistanceMatrixService) {
-      setError("Google Maps service not ready.");
+  // Compute miles & minutes (used for quote + fallback fare for Stripe)
+  async function computeTripStats(): Promise<{ miles: number; minutes: number } | null> {
+    if (!window.google?.maps?.DistanceMatrixService) return null;
+
+    const { origin, destination } = getOD();
+    const departureDateTime = new Date(`${rideDate}T${rideTime}:00`);
+
+    return new Promise((resolve) => {
+      const service = new window.google.maps.DistanceMatrixService();
+      service.getDistanceMatrix(
+        {
+          origins: [origin],
+          destinations: [destination],
+          travelMode: window.google.maps.TravelMode.DRIVING,
+          unitSystem: window.google.maps.UnitSystem.IMPERIAL,
+          drivingOptions: {
+            departureTime: departureDateTime,
+            trafficModel: "bestguess",
+          },
+        },
+        (response: any, status: string) => {
+          if (status !== "OK") {
+            resolve(null);
+            return;
+          }
+          try {
+            const elem = response.rows[0].elements[0];
+            const meters = elem.distance.value;
+            const miles = meters / 1609.34;
+            const seconds = (elem.duration_in_traffic ?? elem.duration).value;
+            const minutes = seconds / 60;
+            resolve({ miles, minutes });
+          } catch {
+            resolve(null);
+          }
+        }
+      );
+    });
+  }
+
+  const handleQuote = async () => {
+    const problem = validateForQuote();
+    if (problem) {
+      setError(problem);
+      return;
+    }
+    setError(null);
+    setQuoteReady(true);
+
+    const stats = await computeTripStats();
+    if (!stats) {
+      setError("Error fetching distance from Google.");
       return;
     }
 
-    // Build departure time from date + time inputs
-    const departureDateTime = new Date(`${rideDate}T${rideTime}:00`);
+    const { miles, minutes } = stats;
+    const cents = calcFareCents(miles);
+    try {
+      sessionStorage.setItem("JETSET_QUOTE_TOTAL_CENTS", String(cents));
+    } catch {}
 
-    const service = new window.google.maps.DistanceMatrixService();
-    service.getDistanceMatrix(
-      {
-        origins: [origin],
-        destinations: [destination],
-        travelMode: window.google.maps.TravelMode.DRIVING,
-        unitSystem: window.google.maps.UnitSystem.IMPERIAL,
-        drivingOptions: {
-          departureTime: departureDateTime,
-          trafficModel: "bestguess", // ✅ FIXED here
-        },
-      },
-      (response: any, status: string) => {
-        if (status !== "OK") {
-          setError("Error fetching distance from Google.");
-          return;
-        }
-        const meters = response.rows[0].elements[0].distance.value;
-        const miles = meters / 1609.34;
-        const seconds = response.rows[0].elements[0].duration_in_traffic.value;
-        const minutes = seconds / 60;
-
-        router.push(`/quote?distance=${miles.toFixed(1)}&minutes=${minutes.toFixed(0)}`);
-      }
-    );
+    // 👉 now include minutes in the URL so /quote can always render
+    router.push(`/quote?distance=${miles.toFixed(1)}&minutes=${minutes.toFixed(0)}`);
   };
+
+  // --- Stripe call + redirect (Confirm Booking) ---
+  async function handleBookNow() {
+    if (!session) {
+      signIn();
+      return;
+    }
+
+    // Prefer the stored quote; if missing, compute a fresh price.
+    let unitAmount = 4500; // default to $45.00
+    try {
+      const stored = sessionStorage.getItem("JETSET_QUOTE_TOTAL_CENTS");
+      if (stored && !Number.isNaN(Number(stored))) {
+        unitAmount = Number(stored);
+      } else {
+        const stats = await computeTripStats();
+        if (stats) unitAmount = calcFareCents(stats.miles);
+      }
+    } catch {
+      const stats = await computeTripStats();
+      if (stats) unitAmount = calcFareCents(stats.miles);
+    }
+
+    const payload = {
+      unitAmount, // cents
+      bookingId: "temp-id-123", // replace with real booking id when you persist
+      email: session?.user?.email ?? undefined,
+    };
+
+    const res = await fetch("/api/stripe/checkout", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify(payload),
+    });
+
+    if (!res.ok) {
+      alert("Could not start checkout.");
+      return;
+    }
+
+    const data = await res.json();
+    if (data?.url) {
+      window.location.href = data.url; // Stripe Checkout
+    } else {
+      alert("Checkout URL missing.");
+    }
+  }
 
   const AirportFields = () => (
     <>
@@ -297,7 +380,7 @@ export default function BookingPage() {
             </button>
           </div>
 
-          {/* New Date + Time Inputs */}
+          {/* Date + Time */}
           <div className="mb-4">
             <label className="block mb-1 font-medium">Select Date</label>
             <input
@@ -372,6 +455,16 @@ export default function BookingPage() {
             >
               Get Quote
             </button>
+
+            {quoteReady && (
+              <button
+                onClick={handleBookNow}
+                className="px-6 py-2 rounded font-semibold"
+                style={{ backgroundColor: JETSET_NAVY, color: "#fff" }}
+              >
+                Confirm Booking
+              </button>
+            )}
           </div>
         </section>
       </main>

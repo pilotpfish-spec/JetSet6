@@ -1,54 +1,55 @@
-import { Suspense } from "react";
-import { Metadata } from "next";
-import Link from "next/link";
+// app/(auth)/login/page.tsx
+"use client";
 
-import { cn } from "@/lib/utils";
-import { buttonVariants } from "@/components/ui/button";
-import { UserAuthForm } from "@/components/forms/user-auth-form";
-import { Icons } from "@/components/shared/icons";
-
-export const metadata: Metadata = {
-  title: "Login",
-  description: "Login to your account",
-};
+import { useState } from "react";
+import { signIn } from "next-auth/react";
 
 export default function LoginPage() {
+  const [email, setEmail] = useState("");
+  const [sent, setSent] = useState(false);
+  const callbackUrl = "/account";
+
+  async function handleEmail(e: React.FormEvent) {
+    e.preventDefault();
+    const res = await signIn("email", { email, callbackUrl, redirect: false });
+    if (res?.ok) setSent(true);
+    else alert("Could not send sign-in link. Double-check your email.");
+  }
+
   return (
-    <div className="container flex h-screen w-screen flex-col items-center justify-center">
-      <Link
-        href="/"
-        className={cn(
-          buttonVariants({ variant: "outline", size: "sm" }),
-          "absolute left-4 top-4 md:left-8 md:top-8",
-        )}
+    <main className="mx-auto max-w-md px-4 py-10">
+      <h1 className="text-2xl font-bold text-center mb-6">Sign in</h1>
+
+      {/* Google */}
+      <button
+        className="w-full rounded bg-black text-white py-2 mb-4"
+        onClick={() => signIn("google", { callbackUrl })}
       >
-        <>
-          <Icons.chevronLeft className="mr-2 size-4" />
-          Back
-        </>
-      </Link>
-      <div className="mx-auto flex w-full flex-col justify-center space-y-6 sm:w-[350px]">
-        <div className="flex flex-col space-y-2 text-center">
-          <Icons.logo className="mx-auto size-6" />
-          <h1 className="text-2xl font-semibold tracking-tight">
-            Welcome back
-          </h1>
-          <p className="text-sm text-muted-foreground">
-            Enter your email to sign in to your account
-          </p>
-        </div>
-        <Suspense>
-          <UserAuthForm />
-        </Suspense>
-        <p className="px-8 text-center text-sm text-muted-foreground">
-          <Link
-            href="/register"
-            className="hover:text-brand underline underline-offset-4"
-          >
-            Don&apos;t have an account? Sign Up
-          </Link>
+        Continue with Google
+      </button>
+
+      <div className="text-center text-sm text-gray-500 my-3">OR</div>
+
+      {/* Email magic link */}
+      {sent ? (
+        <p className="text-center text-green-700">
+          Check your email for the sign-in link.
         </p>
-      </div>
-    </div>
+      ) : (
+        <form onSubmit={handleEmail}>
+          <input
+            className="w-full border rounded px-3 py-2 mb-3"
+            type="email"
+            placeholder="name@example.com"
+            value={email}
+            onChange={(e) => setEmail(e.target.value)}
+            required
+          />
+          <button className="w-full rounded border py-2" type="submit">
+            Email me a sign-in link
+          </button>
+        </form>
+      )}
+    </main>
   );
 }

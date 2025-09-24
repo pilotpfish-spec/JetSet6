@@ -1,9 +1,17 @@
-import Stripe from "stripe"
+import Stripe from "stripe";
 
-if (!process.env.STRIPE_SECRET_KEY) {
-  throw new Error("Missing STRIPE_SECRET_KEY in environment")
+const key = process.env.STRIPE_SECRET_KEY;
+if (!key) {
+  throw new Error("STRIPE_SECRET_KEY is not set");
 }
 
-export const stripe = new Stripe(process.env.STRIPE_SECRET_KEY, {
-  apiVersion: "2025-08-27.basil", // update to match current SDK typings
-})
+export const stripe = new Stripe(key, {
+  apiVersion: "2024-06-20",
+});
+
+export function getBaseUrl(): string {
+  const a = process.env.NEXT_PUBLIC_APP_URL;
+  const b = process.env.NEXTAUTH_URL;
+  const base = (a || b || "http://localhost:3000").replace(/\/$/, "");
+  return base;
+}

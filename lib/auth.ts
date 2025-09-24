@@ -109,5 +109,3 @@ export const authOptions: NextAuthConfig = {
 
 // Export handler for the Route Handler to import
 export const { handlers, auth } = NextAuth(authOptions);
-
-

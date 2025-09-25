@@ -1,33 +1,28 @@
 // lib/auth.ts
-
 import type { NextAuthOptions } from "next-auth";
 import NextAuth from "next-auth";
 import GoogleProvider from "next-auth/providers/google";
 import EmailProvider from "next-auth/providers/email";
-
-// ⬇️ Robust import: supports both @auth/prisma-adapter and @next-auth/prisma-adapter
-import * as PrismaAdapterPkg from "@auth/prisma-adapter";
-// If the older package is still installed, Next may resolve that one; this keeps us safe.
-const PrismaAdapterAny =
-  (PrismaAdapterPkg as any).PrismaAdapter ??
-  (PrismaAdapterPkg as any).default;
-
+import { PrismaAdapter } from "@auth/prisma-adapter";
 import { prisma } from "@/lib/prisma";
 
-// -------- base URL / cookies --------
-const isProd = !!process.env.VERCEL;
-const defaultBase = isProd ? "https://jetsetdirect.com" : "http://localhost:3000";
-const baseUrl = (process.env.NEXTAUTH_URL || defaultBase).trim();
+// Base URL determines cookie security and redirect behavior
+const baseUrl = process.env.NEXTAUTH_URL ?? "http://localhost:3000";
 const useSecureCookies = baseUrl.startsWith("https://");
 
-// --- Mailgun helper (unchanged) ---
+// --- Mailgun helper (no extra deps) ---
 async function sendWithMailgun(to: string, subject: string, text: string, html: string) {
   const apiKey = process.env.MAILGUN_API_KEY!;
   const domain = process.env.MAILGUN_DOMAIN!;
   const from = process.env.EMAIL_FROM!;
+
   const body = new URLSearchParams();
-  body.set("from", from); body.set("to", to);
-  body.set("subject", subject); body.set("text", text); body.set("html", html);
+  body.set("from", from);
+  body.set("to", to);
+  body.set("subject", subject);
+  body.set("text", text);
+  body.set("html", html);
+
   const resp = await fetch(`https://api.mailgun.net/v3/${domain}/messages`, {
     method: "POST",
     headers: {
@@ -36,17 +31,17 @@ async function sendWithMailgun(to: string, subject: string, text: string, html: 
     },
     body: body.toString(),
   });
+
   if (!resp.ok) {
-    const msg = await resp.text().catch(() => "");
-    throw new Error(`Mailgun send failed: ${resp.status} ${msg}`);
+    const errTxt = await resp.text().catch(() => "");
+    throw new Error(`Mailgun send failed: ${resp.status} ${errTxt}`);
   }
 }
 
 export const authOptions: NextAuthOptions = {
-  // ✅ Use the adapter we resolved above
-  adapter: PrismaAdapterAny(prisma) as any,
+  adapter: PrismaAdapter(prisma) as any,
 
-  // We want DB sessions (so they show in Prisma)
+  // Persist sessions in Prisma so Studio shows them
   session: { strategy: "database" },
 
   useSecureCookies,
@@ -75,26 +70,55 @@ export const authOptions: NextAuthOptions = {
 
   pages: { signIn: "/login" },
 
-  // ✅ Make sure session.user.id is present for BOTH jwt & database strategies
   callbacks: {
+    // Keep redirects on our own origin
+    async redirect({ url, baseUrl }) {
+      try {
+        const target = new URL(url, baseUrl);
+        const base = new URL(baseUrl);
+        return target.origin === base.origin ? target.toString() : base.toString();
+      } catch {
+        return baseUrl;
+      }
+    },
+
+    // Keep id in the token if it exists (helps during transitions)
     async jwt({ token, user }) {
-      if (user) (token as any).id = (user as any).id;
+      if ((user as any)?.id) (token as any).sub = (user as any).id;
       return token;
     },
-    async session({ session, token, user }) {
-      const id = (user as any)?.id ?? (token as any)?.id;
-      if (id) (session.user as any).id = String(id);
+
+    // *** The fix: always attach user.id to the session ***
+    async session({ session, user, token }) {
+      const s: any = session;
+
+      // 1) Database sessions provide `user`
+      if ((user as any)?.id) {
+        s.user.id = (user as any).id;
+        return session;
+      }
+
+      // 2) If JWT exists, use its subject
+      if (token?.sub) {
+        s.user.id = token.sub as string;
+        return session;
+      }
+
+      // 3) Final fallback: look up by email
+      if (session.user?.email) {
+        const u = await prisma.user.findUnique({
+          where: { email: session.user.email },
+          select: { id: true },
+        });
+        if (u) s.user.id = u.id;
+      }
+
       return session;
-    },
-    async redirect({ url }) {
-      const base = new URL(baseUrl);
-      const target = new URL(url, base);
-      return target.origin === base.origin ? target.toString() : base.toString();
     },
   },
 };
 
-// Route handler (unchanged)
+// Create route handler once, re-use in the route file
 const handler = NextAuth(authOptions);
 export { handler as GET, handler as POST };
 export default handler;

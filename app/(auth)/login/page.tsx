@@ -1,55 +1,18 @@
 // app/(auth)/login/page.tsx
-"use client";
-
-import { useState } from "react";
-import { signIn } from "next-auth/react";
+import Link from "next/link";
 
 export default function LoginPage() {
-  const [email, setEmail] = useState("");
-  const [sent, setSent] = useState(false);
-  const callbackUrl = "/account";
-
-  async function handleEmail(e: React.FormEvent) {
-    e.preventDefault();
-    const res = await signIn("email", { email, callbackUrl, redirect: false });
-    if (res?.ok) setSent(true);
-    else alert("Could not send sign-in link. Double-check your email.");
-  }
-
   return (
-    <main className="mx-auto max-w-md px-4 py-10">
-      <h1 className="text-2xl font-bold text-center mb-6">Sign in</h1>
-
-      {/* Google */}
-      <button
-        className="w-full rounded bg-black text-white py-2 mb-4"
-        onClick={() => signIn("google", { callbackUrl })}
-      >
-        Continue with Google
-      </button>
-
-      <div className="text-center text-sm text-gray-500 my-3">OR</div>
-
-      {/* Email magic link */}
-      {sent ? (
-        <p className="text-center text-green-700">
-          Check your email for the sign-in link.
+    <div style={{ padding: 24 }}>
+      <h1 style={{ fontSize: 24, fontWeight: 700, marginBottom: 16 }}>Sign in</h1>
+      <div style={{ display: "grid", gap: 12, maxWidth: 420 }}>
+        <a href="/api/auth/signin/google" className="btn">Continue with Google</a>
+        <a href="/api/auth/signin/email" className="btn">Email me a sign-in link</a>
+        <a href="/api/auth/signin/credentials" className="btn">Use email + password</a>
+        <p style={{ color: "#6b7280" }}>
+          You’ll be returned to your account after signing in. <Link href="/">Home</Link>
         </p>
-      ) : (
-        <form onSubmit={handleEmail}>
-          <input
-            className="w-full border rounded px-3 py-2 mb-3"
-            type="email"
-            placeholder="name@example.com"
-            value={email}
-            onChange={(e) => setEmail(e.target.value)}
-            required
-          />
-          <button className="w-full rounded border py-2" type="submit">
-            Email me a sign-in link
-          </button>
-        </form>
-      )}
-    </main>
+      </div>
+    </div>
   );
 }

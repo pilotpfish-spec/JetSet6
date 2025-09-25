@@ -1,14 +1,15 @@
 // lib/auth.ts
-import type { NextAuthOptions } from "next-auth";
-import NextAuth from "next-auth";
+import NextAuth, { type NextAuthOptions } from "next-auth";
 import GoogleProvider from "next-auth/providers/google";
 import EmailProvider from "next-auth/providers/email";
+import CredentialsProvider from "next-auth/providers/credentials";
 import { PrismaAdapter } from "@auth/prisma-adapter";
 import { prisma } from "@/lib/prisma";
+import { compare } from "bcryptjs";
 
-// Base URL determines cookie security and redirect behavior
-const baseUrl = process.env.NEXTAUTH_URL ?? "http://localhost:3000";
-const useSecureCookies = baseUrl.startsWith("https://");
+const isProd = !!process.env.VERCEL;
+const DEFAULT_BASE = isProd ? "https://jetsetdirect.com" : "http://localhost:3000";
+export const BASE_URL = (process.env.NEXTAUTH_URL || DEFAULT_BASE).trim();
 
 // --- Mailgun helper (no extra deps) ---
 async function sendWithMailgun(to: string, subject: string, text: string, html: string) {
@@ -41,17 +42,18 @@ async function sendWithMailgun(to: string, subject: string, text: string, html: 
 export const authOptions: NextAuthOptions = {
   adapter: PrismaAdapter(prisma) as any,
 
-  // Persist sessions in Prisma so Studio shows them
+  // Persist sessions to Prisma (Session table)
   session: { strategy: "database" },
 
-  useSecureCookies,
-
+  // Providers
   providers: [
     GoogleProvider({
       clientId: process.env.GOOGLE_CLIENT_ID!,
       clientSecret: process.env.GOOGLE_CLIENT_SECRET!,
       allowDangerousEmailAccountLinking: true,
     }),
+
+    // Email magic-link via Mailgun
     EmailProvider({
       from: process.env.EMAIL_FROM,
       async sendVerificationRequest({ identifier, url }) {
@@ -66,59 +68,50 @@ export const authOptions: NextAuthOptions = {
         await sendWithMailgun(identifier, subject, text, html);
       },
     }),
+
+    // Optional username/password for admins or test users
+    CredentialsProvider({
+      name: "Credentials",
+      credentials: {
+        email: { label: "Email", type: "email" },
+        password: { label: "Password", type: "password" },
+      },
+      async authorize(creds) {
+        if (!creds?.email || !creds.password) return null;
+        const user = await prisma.user.findUnique({ where: { email: creds.email } });
+        if (!user?.password) return null;
+        const ok = await compare(creds.password, user.password);
+        if (!ok) return null;
+        return { id: user.id, name: user.name, email: user.email, image: user.image };
+      },
+    }),
   ],
 
-  pages: { signIn: "/login" },
+  pages: {
+    signIn: "/login",
+  },
 
   callbacks: {
-    // Keep redirects on our own origin
-    async redirect({ url, baseUrl }) {
+    // Keep redirects inside our own origin
+    async redirect({ url }) {
       try {
-        const target = new URL(url, baseUrl);
-        const base = new URL(baseUrl);
+        const base = new URL(BASE_URL);
+        const target = new URL(url, base);
         return target.origin === base.origin ? target.toString() : base.toString();
       } catch {
-        return baseUrl;
+        return BASE_URL;
       }
     },
 
-    // Keep id in the token if it exists (helps during transitions)
-    async jwt({ token, user }) {
-      if ((user as any)?.id) (token as any).sub = (user as any).id;
-      return token;
-    },
-
-    // *** The fix: always attach user.id to the session ***
-    async session({ session, user, token }) {
-      const s: any = session;
-
-      // 1) Database sessions provide `user`
-      if ((user as any)?.id) {
-        s.user.id = (user as any).id;
-        return session;
-      }
-
-      // 2) If JWT exists, use its subject
-      if (token?.sub) {
-        s.user.id = token.sub as string;
-        return session;
-      }
-
-      // 3) Final fallback: look up by email
-      if (session.user?.email) {
-        const u = await prisma.user.findUnique({
-          where: { email: session.user.email },
-          select: { id: true },
-        });
-        if (u) s.user.id = u.id;
-      }
-
+    // With database sessions, NextAuth passes `user`
+    async session({ session, user }) {
+      if (user?.id) (session.user as any).id = user.id;
       return session;
     },
   },
 };
 
-// Create route handler once, re-use in the route file
+// Export handler for route reuse
 const handler = NextAuth(authOptions);
 export { handler as GET, handler as POST };
 export default handler;

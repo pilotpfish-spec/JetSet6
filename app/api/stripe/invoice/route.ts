@@ -31,30 +31,22 @@ export async function POST(req: Request) {
   let step = "start";
   try {
     const session = await getServerSession(authOptions);
-    if (!session?.user) {
+    if (!session?.user?.id) {
       return NextResponse.json({ error: "Unauthorized (sign in required)" }, { status: 401 });
     }
-
-    // Ensure we have a userId (fallback by email if needed)
-    let userId = (session.user as any).id as string | undefined;
-    if (!userId && session.user.email) {
-      const u = await prisma.user.findUnique({
-        where: { email: session.user.email },
-        select: { id: true },
-      });
-      userId = u?.id;
-    }
-    if (!userId) {
-      return NextResponse.json({ error: "No user id available for booking" }, { status: 500 });
-    }
+    const userId = (session.user as any).id as string;
 
     const body = (await req.json()) as Body;
 
     step = "validate";
     const cents = Math.round(Number(body.unitAmount));
-    if (!Number.isFinite(cents) || cents < 50) return NextResponse.json({ error: "Invalid unitAmount" }, { status: 400 });
+    if (!Number.isFinite(cents) || cents < 50) {
+      return NextResponse.json({ error: "Invalid unitAmount (min 50 cents)" }, { status: 400 });
+    }
     const email = (body.email || "").trim();
-    if (!email) return NextResponse.json({ error: "Email required" }, { status: 400 });
+    if (!email) {
+      return NextResponse.json({ error: "Email is required" }, { status: 400 });
+    }
 
     step = "format";
     const when = fmtWhen(body.dateIso);
@@ -62,12 +54,16 @@ export async function POST(req: Request) {
     const dropoff = compact(body.dropoffAddress);
     const airport = compact(body.airport);
     const terminal = compact(body.terminal);
+
     const parts: string[] = [];
     if (pickup || dropoff) parts.push([pickup, dropoff].filter(Boolean).join(" → "));
     if (airport && terminal) parts.push(`${airport} — ${terminal}`);
     else if (airport) parts.push(airport);
     if (when) parts.push(when);
-    const lineDescription = body.description || (parts.length ? `Ground Service — ${parts.join(" | ")}` : "Ground Service — Pay Later");
+
+    const lineDescription =
+      body.description ||
+      (parts.length ? `Ground Service — ${parts.join(" | ")}` : "Ground Service — Pay Later");
 
     step = "db.create";
     const booking = await prisma.booking.create({

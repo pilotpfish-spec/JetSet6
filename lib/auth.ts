@@ -26,7 +26,7 @@ async function sendWithMailgun(to: string, subject: string, text: string, html: 
                "Content-Type": "application/x-www-form-urlencoded" },
     body: body.toString(),
   });
-  if (!resp.ok) throw new Error(`Mailgun send failed: ${resp.status} ${await resp.text().catch(()=>"""")}`);
+  if (!resp.ok) throw new Error(`Mailgun send failed: ${resp.status} ${await resp.text().catch(() => "")}`);
 }
 
 export const authOptions: NextAuthOptions = {
@@ -75,4 +75,5 @@ export const authOptions: NextAuthOptions = {
 const handler = NextAuth(authOptions);
 export { handler as GET, handler as POST };
 export default handler;
+
 

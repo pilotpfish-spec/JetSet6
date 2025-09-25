@@ -1,3 +1,42 @@
+# Save as C:\JetSetNew6\scripts\phase4-route-fixes.ps1
+param([string]$ProjectRoot = "C:\JetSetNew6")
+
+$ErrorActionPreference = "Stop"
+function Log([string]$m){ Write-Host "[$(Get-Date -Format 'HH:mm:ss')] $m" }
+function EnsureDir($p){ if(-not (Test-Path $p)){ New-Item -ItemType Directory -Force -Path $p | Out-Null } }
+function Backup([string]$path){ if(Test-Path $path){ $stamp=Get-Date -Format "yyyyMMdd-HHmmss"; Copy-Item $path ($path+".bak.$stamp") -Force; Log "Backup -> $path.bak.$stamp" } }
+function WriteText([string]$path,[string]$content){ EnsureDir (Split-Path -Parent $path); if(Test-Path $path){ $ex=(Get-Content $path -Raw); if($ex -eq $content){ Log "UNCHANGED $path"; return }; Backup $path }; Set-Content $path $content -Encoding UTF8; Log "WROTE   $path" }
+
+Set-Location $ProjectRoot
+Log "Root: $ProjectRoot"
+
+# 1) /account → redirect to /account/bookings
+$accountIndex = @'
+import { redirect } from "next/navigation";
+export default function AccountIndex(){ redirect("/account/bookings"); }
+'@
+WriteText (Join-Path $ProjectRoot "app\account\page.tsx") $accountIndex
+
+# 2) /dashboard → redirect to /account/bookings (for old links/callbacks)
+$dashboardIndex = @'
+import { redirect } from "next/navigation";
+export default function DashboardIndex(){ redirect("/account/bookings"); }
+'@
+WriteText (Join-Path $ProjectRoot "app\dashboard\page.tsx") $dashboardIndex
+
+# 3) Health endpoint: move _health → health
+$oldHealth = Join-Path $ProjectRoot "app\api\_health\auth\route.ts"
+$newHealthDir = Join-Path $ProjectRoot "app\api\health\auth"
+$newHealth = Join-Path $newHealthDir "route.ts"
+if (Test-Path $oldHealth) {
+  EnsureDir $newHealthDir
+  Copy-Item $oldHealth $newHealth -Force
+  Remove-Item $oldHealth -Force
+  Log "Moved route: /api/_health/auth → /api/health/auth"
+}
+
+# 4) Rewrite lib/auth.ts with safe redirect normalization
+$authTs = @'
 import type { NextAuthOptions } from "next-auth";
 import NextAuth from "next-auth";
 import GoogleProvider from "next-auth/providers/google";
@@ -72,3 +111,14 @@ export const authOptions: NextAuthOptions = {
 const handler = NextAuth(authOptions);
 export { handler as GET, handler as POST };
 export default handler;
+'@
+WriteText (Join-Path $ProjectRoot "lib\auth.ts") $authTs
+
+# Commit & push
+git add .
+git commit -m "Fix routes: add /account & /dashboard redirects; normalize NextAuth redirect; move health endpoint" | Out-Null
+git push origin main | Out-Host
+Log "✅ Pushed. After deploy, test:"
+Log " - https://jetsetdirect.com/login  (sign in)"
+Log " - https://jetsetdirect.com/account  (should redirect to /account/bookings)"
+Log " - https://jetsetdirect.com/api/health/auth  (JSON with session/baseUrl)"

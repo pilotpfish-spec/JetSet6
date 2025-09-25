@@ -1,0 +1,182 @@
+import AccountAddresses from "@/components/AccountAddresses";
+// app/account/page.tsx
+import { headers } from "next/headers";
+import Link from "next/link";
+
+export const dynamic = "force-dynamic";
+export const revalidate = 0;
+
+type UiBooking = {
+  id: string;
+  whenISO: string;
+  pickup: string;
+  dropoff: string;
+  status: "unpaid" | "paid" | "cancelled";
+  totalCents?: number | null;
+  receiptUrl?: string;
+};
+
+async function getSummary() {
+  // Forward cookies so the API sees your auth session in prod
+  const h = headers();
+  const cookie = h.get("cookie") ?? "";
+
+  const res = await fetch(`${process.env.NEXT_PUBLIC_APP_URL || ""}/api/account/summary`, {
+    method: "GET",
+    headers: { cookie },
+    cache: "no-store",
+  });
+
+  if (!res.ok) {
+    // If unauthenticated or any error, pretend empty lists (page stays friendly)
+    return { upcoming: [] as UiBooking[], past: [] as UiBooking[] };
+  }
+
+  return (await res.json()) as { upcoming: UiBooking[]; past: UiBooking[] };
+}
+
+function fmtDate(iso: string) {
+  try {
+    const d = new Date(iso);
+    return d.toLocaleString(undefined, {
+      year: "numeric",
+      month: "short",
+      day: "2-digit",
+      hour: "2-digit",
+      minute: "2-digit",
+    });
+  } catch {
+    return iso;
+  }
+}
+
+export default async function AccountPage() {
+  const { upcoming, past } = await getSummary();
+
+  return (
+    <main className="mx-auto max-w-4xl px-4 py-10">
+      <h1 className="text-2xl font-bold mb-6">Your Account</h1>
+
+      {/* Addresses quick entry */}
+      <section className="mb-10">
+        <div className="flex items-center justify-between mb-3">
+          <h2 className="text-xl font-semibold">Saved Addresses</h2>
+          <Link
+            href="/booking"
+            className="rounded px-4 py-2 border"
+            prefetch={false}
+          >
+            Add from Booking
+          </Link>
+        </div>
+        <p className="text-sm text-gray-600">
+          You can add or update addresses from the booking flow for now.
+        </p>
+      </section>
+
+      {/* Upcoming */}
+      <section className="mb-10">
+        <h2 className="text-xl font-semibold mb-3">Upcoming Rides</h2>
+        {upcoming.length === 0 ? (
+          <p className="text-gray-600">No upcoming rides yet.</p>
+        ) : (
+          <ul className="space-y-3">
+            {upcoming.map((b) => (
+              <li key={b.id} className="border rounded p-4">
+                <div className="flex flex-wrap items-center justify-between gap-2">
+                  <div>
+                    <div className="font-medium">{fmtDate(b.whenISO)}</div>
+                    <div className="text-sm text-gray-700">
+                      {b.pickup} → {b.dropoff}
+                    </div>
+                  </div>
+                  <div className="text-sm">
+                    <span
+                      className={
+                        b.status === "paid"
+                          ? "text-green-700"
+                          : b.status === "cancelled"
+                          ? "text-red-700"
+                          : "text-amber-700"
+                      }
+                    >
+                      {b.status}
+                    </span>
+                    {typeof b.totalCents === "number" ? (
+                      <span className="ml-3">
+                        {(b.totalCents / 100).toLocaleString(undefined, {
+                          style: "currency",
+                          currency: "USD",
+                        })}
+                      </span>
+                    ) : null}
+                  </div>
+                </div>
+              </li>
+            ))}
+          </ul>
+        )}
+      </section>
+
+      {/* Past */}
+      <section className="mb-10">
+        <h2 className="text-xl font-semibold mb-3">Past Rides</h2>
+        {past.length === 0 ? (
+          <p className="text-gray-600">No past rides yet.</p>
+        ) : (
+          <ul className="space-y-3">
+            {past.map((b) => (
+              <li key={b.id} className="border rounded p-4">
+                <div className="flex flex-wrap items-center justify-between gap-2">
+                  <div>
+                    <div className="font-medium">{fmtDate(b.whenISO)}</div>
+                    <div className="text-sm text-gray-700">
+                      {b.pickup} → {b.dropoff}
+                    </div>
+                  </div>
+                  <div className="text-sm">
+                    <span
+                      className={
+                        b.status === "paid"
+                          ? "text-green-700"
+                          : b.status === "cancelled"
+                          ? "text-red-700"
+                          : "text-amber-700"
+                      }
+                    >
+                      {b.status}
+                    </span>
+                    {typeof b.totalCents === "number" ? (
+                      <span className="ml-3">
+                        {(b.totalCents / 100).toLocaleString(undefined, {
+                          style: "currency",
+                          currency: "USD",
+                        })}
+                      </span>
+                    ) : null}
+                    {b.receiptUrl ? (
+                      <a
+                        href={b.receiptUrl}
+                        target="_blank"
+                        rel="noreferrer"
+                        className="ml-4 underline"
+                      >
+                        Receipt
+                      </a>
+                    ) : null}
+                  </div>
+                </div>
+              </li>
+            ))}
+          </ul>
+        )}
+      </section>
+
+      <div className="text-sm text-gray-500">
+        Not seeing data? Make sure you’re signed in, then refresh.
+      </div>
+      <AccountAddresses />
+</main>
+  );
+}
+

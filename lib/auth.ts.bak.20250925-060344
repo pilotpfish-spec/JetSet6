@@ -1,3 +1,4 @@
+// lib/auth.ts
 import type { NextAuthOptions } from "next-auth";
 import NextAuth from "next-auth";
 import GoogleProvider from "next-auth/providers/google";
@@ -5,11 +6,13 @@ import EmailProvider from "next-auth/providers/email";
 import { PrismaAdapter } from "@auth/prisma-adapter";
 import { prisma } from "@/lib/prisma";
 
+// Normalize base URL to avoid preview-domain OAuth mismatch
 const isProd = !!process.env.VERCEL;
 const defaultBase = isProd ? "https://jetsetdirect.com" : "http://localhost:3000";
 const baseUrl = process.env.NEXTAUTH_URL || defaultBase;
 const useSecureCookies = baseUrl.startsWith("https://");
 
+// --- Mailgun helper ---
 async function sendWithMailgun(to: string, subject: string, text: string, html: string) {
   const apiKey = process.env.MAILGUN_API_KEY!;
   const domain = process.env.MAILGUN_DOMAIN!;
@@ -28,8 +31,12 @@ async function sendWithMailgun(to: string, subject: string, text: string, html: 
 
 export const authOptions: NextAuthOptions = {
   adapter: PrismaAdapter(prisma) as any,
+
+  // ✅ Persist sessions in Prisma (so Session rows appear)
   session: { strategy: "database" },
+
   useSecureCookies,
+
   providers: [
     GoogleProvider({
       clientId: process.env.GOOGLE_CLIENT_ID!,
@@ -50,19 +57,15 @@ export const authOptions: NextAuthOptions = {
       },
     }),
   ],
+
   pages: { signIn: "/login" },
+
   callbacks: {
     async redirect({ url }) {
+      // Force redirects to baseUrl to avoid preview-domain callback mismatch
       const base = new URL(baseUrl);
-      let target: URL;
-      try { target = new URL(url, base); } catch { return base.toString(); }
-      // Only allow same-origin
-      if (target.origin !== base.origin) return base.toString();
-      // Normalize legacy/empty routes
-      const path = target.pathname;
-      const normalized =
-        path === "/dashboard" || path === "/account" || path === "/" ? "/account/bookings" : path;
-      return new URL(normalized + target.search + target.hash, base).toString();
+      const target = new URL(url, base);
+      return target.origin === base.origin ? target.toString() : base.toString();
     },
     async jwt({ token, user }) { if (user) (token as any).id = (user as any).id; return token; },
     async session({ session, token }) { if (token?.id) (session.user as any).id = token.id as string; return session; },
@@ -72,3 +75,5 @@ export const authOptions: NextAuthOptions = {
 const handler = NextAuth(authOptions);
 export { handler as GET, handler as POST };
 export default handler;
+
+

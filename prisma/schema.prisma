@@ -75,6 +75,9 @@ model Booking {
   totalCents             Int?
   receiptUrl             String?
   notes                  String?
+
+  scheduledAt DateTime
+  priceCents Int
 }
 
 model Address {
@@ -111,3 +114,4 @@ enum BookingStatus {
   CONFIRMED
   CANCELLED
 }
+

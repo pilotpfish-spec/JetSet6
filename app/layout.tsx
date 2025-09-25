@@ -4,6 +4,8 @@ import Link from "next/link";
 import Image from "next/image";
 import Providers from "./providers"; // ✅ keep
 import SignOutButton from "@/components/SignOutButton"; // ✅ added
+import { getServerSession } from "next-auth";
+import { authOptions } from "@/lib/auth";
 
 const inter = Inter({ subsets: ["latin"] });
 
@@ -12,11 +14,13 @@ export const metadata = {
   description: "Ground Service Elevated. The Reason We’re Taking Off.",
 };
 
-export default function RootLayout({
+export default async function RootLayout({
   children,
 }: {
   children: React.ReactNode;
 }) {
+  const session = await getServerSession(authOptions);
+
   return (
     <html lang="en">
       <body className={inter.className}>
@@ -34,15 +38,24 @@ export default function RootLayout({
           </Link>
 
           <nav className="flex items-center space-x-6">
-            {/* New: Home + Account links */}
             <Link href="/" className="hover:underline">
               Home
             </Link>
-            <Link href="/account" className="hover:underline">
-              Account
-            </Link>
 
-            {/* Existing */}
+            {/* Only show Account + Sign out if signed in */}
+            {session ? (
+              <>
+                <Link href="/account" className="hover:underline">
+                  Account
+                </Link>
+                <SignOutButton />
+              </>
+            ) : (
+              <Link href="/login" className="hover:underline">
+                Login
+              </Link>
+            )}
+
             <Link
               href="/booking"
               className="px-4 py-2 rounded-lg bg-white text-[#0a0a23] font-semibold hover:bg-gray-200 transition"
@@ -55,12 +68,6 @@ export default function RootLayout({
             <Link href="/contact" className="hover:underline">
               Contact
             </Link>
-            <Link href="/login" className="hover:underline">
-              Login
-            </Link>
-
-            {/* New: Sign out button */}
-            <SignOutButton />
           </nav>
         </header>
 

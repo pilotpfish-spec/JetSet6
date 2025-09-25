@@ -56,21 +56,13 @@ export const authOptions: NextAuthOptions = {
       const base = new URL(baseUrl);
       let target: URL;
       try { target = new URL(url, base); } catch { return base.toString(); }
-
-      // Never rewrite auth or login routes
-      if (target.pathname.startsWith("/api/auth") || target.pathname === "/login") {
-        return target.toString();
-      }
-
-      // Same-origin only
+      // Only allow same-origin
       if (target.origin !== base.origin) return base.toString();
-
-      // Normalize only these legacy/empty routes
-      const p = target.pathname;
-      if (p === "/" || p === "/account" || p === "/dashboard") {
-        return new URL("/account/bookings" + target.search + target.hash, base).toString();
-      }
-      return target.toString();
+      // Normalize legacy/empty routes
+      const path = target.pathname;
+      const normalized =
+        path === "/dashboard" || path === "/account" || path === "/" ? "/account/bookings" : path;
+      return new URL(normalized + target.search + target.hash, base).toString();
     },
     async jwt({ token, user }) { if (user) (token as any).id = (user as any).id; return token; },
     async session({ session, token }) { if (token?.id) (session.user as any).id = token.id as string; return session; },

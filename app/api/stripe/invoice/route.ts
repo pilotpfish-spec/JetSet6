@@ -1,22 +1,22 @@
 import { NextResponse } from "next/server";
 import { stripe } from "@/lib/stripe";
+import { getServerSession } from "next-auth";
+import { authOptions } from "@/lib/auth";
+import prisma from "@/lib/prisma";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
 type Body = {
-  unitAmount: number;        // cents, integer (e.g., 2599)
-  email: string;             // required for Stripe to email invoice
-  bookingId?: string;
+  unitAmount: number;
+  email: string;
   description?: string;
-  daysUntilDue?: number;     // default 7
-
-  // Trip details to display on the invoice
-  dateIso?: string;          // scheduled service datetime (ISO)
+  daysUntilDue?: number;
+  dateIso?: string;
   pickupAddress?: string;
   dropoffAddress?: string;
-  airport?: string;          // e.g., "DFW" or "DAL"
-  terminal?: string;         // e.g., "Terminal C"
+  airport?: string;
+  terminal?: string;
 };
 
 function fmtWhen(dateIso?: string) {
@@ -31,9 +31,14 @@ function compact(s?: string) {
 
 export async function POST(req: Request) {
   try {
+    const session = await getServerSession(authOptions);
+    if (!session?.user?.id) {
+      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    }
+
     const body = (await req.json()) as Body;
 
-    // Coerce and validate cents
+    // Validate amount & email
     const cents = Math.round(Number(body.unitAmount));
     if (!Number.isFinite(cents) || cents < 50) {
       return NextResponse.json({ error: "Invalid unitAmount (min 50 cents)" }, { status: 400 });
@@ -43,7 +48,7 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: "Email is required" }, { status: 400 });
     }
 
-    // Prepare readable trip info
+    // Trip details
     const when = fmtWhen(body.dateIso);
     const pickup = compact(body.pickupAddress);
     const dropoff = compact(body.dropoffAddress);
@@ -60,10 +65,21 @@ export async function POST(req: Request) {
       body.description ||
       (parts.length ? `Ground Service — ${parts.join(" | ")}` : "Ground Service — Pay Later");
 
-    // 1) Create a customer for this email (simple path; de-dupe later if you wish)
+    // === 1) Create booking in DB ===
+    const booking = await prisma.booking.create({
+      data: {
+        userId: session.user.id,
+        pickup,
+        dropoff,
+        status: "UNPAID",
+        priceCents: cents,
+        scheduledAt: body.dateIso ? new Date(body.dateIso) : new Date(),
+      },
+    });
+
+    // === 2) Stripe customer & invoice ===
     const customer = await stripe.customers.create({ email });
 
-    // 2) Create a DRAFT invoice first (with custom fields visible on invoice)
     const custom_fields = [
       when ? { name: "Service Date", value: when } : undefined,
       pickup ? { name: "Pickup", value: pickup } : undefined,
@@ -78,7 +94,7 @@ export async function POST(req: Request) {
       collection_method: "send_invoice",
       days_until_due: typeof body.daysUntilDue === "number" ? Math.max(1, Math.floor(body.daysUntilDue)) : 7,
       metadata: {
-        ...(body.bookingId ? { bookingId: body.bookingId } : {}),
+        bookingId: booking.id,
         pickup,
         dropoff,
         airport,
@@ -90,17 +106,15 @@ export async function POST(req: Request) {
       ...(custom_fields.length ? { custom_fields } : {}),
     });
 
-    // 3) Attach the line item *directly to this invoice*
     await stripe.invoiceItems.create({
       customer: customer.id,
       currency: "usd",
-      amount: cents, // already integer cents
+      amount: cents,
       description: lineDescription,
-      metadata: body.bookingId ? { bookingId: body.bookingId } : undefined,
-      invoice: invoice.id, // <-- key to ensure non-$0 totals
+      metadata: { bookingId: booking.id },
+      invoice: invoice.id,
     });
 
-    // 4) Finalize the invoice so we get the hosted link, then send it
     const finalized = await stripe.invoices.finalizeInvoice(invoice.id);
     await stripe.invoices.sendInvoice(finalized.id);
 
@@ -110,9 +124,9 @@ export async function POST(req: Request) {
     }
 
     return NextResponse.json({
+      bookingId: booking.id,
       invoiceId: finalized.id,
       url,
-      customerId: customer.id,
       amountDue: finalized.amount_due,
       currency: finalized.currency,
       status: finalized.status,

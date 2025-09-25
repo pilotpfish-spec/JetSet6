@@ -41,8 +41,8 @@ async function sendWithMailgun(to: string, subject: string, text: string, html: 
 export const authOptions: NextAuthOptions = {
   adapter: PrismaAdapter(prisma) as any,
 
-  // ✅ Fix: persist sessions in the database (not JWT-only)
-  session: { strategy: "jwt" },
+  // ✅ Fix: persist sessions in Prisma, not JWT-only
+  session: { strategy: "database" },
 
   useSecureCookies,
 
@@ -50,7 +50,7 @@ export const authOptions: NextAuthOptions = {
     GoogleProvider({
       clientId: process.env.GOOGLE_CLIENT_ID!,
       clientSecret: process.env.GOOGLE_CLIENT_SECRET!,
-      allowDangerousEmailAccountLinking: true, // lets the same email use Google + Email
+      allowDangerousEmailAccountLinking: true,
     }),
 
     // Email magic-link (passwordless) via Mailgun

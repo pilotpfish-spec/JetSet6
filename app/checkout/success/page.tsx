@@ -1,3 +1,5 @@
+export const runtime = 'nodejs';
+export const dynamic = 'force-dynamic';
 export default function Success() {
   return (
     <main className="px-4 py-14">

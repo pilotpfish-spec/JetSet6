@@ -1,0 +1,101 @@
+[
+  {
+    "name": "Home",
+    "url": "https://www.jetsetdirect.com/",
+    "method": "GET",
+    "code": 200,
+    "timeMs": 635,
+    "pass": true,
+    "note": "Matched pattern: JetSet|Book Now|Ground Service"
+  },
+  {
+    "name": "Booking",
+    "url": "https://www.jetsetdirect.com/booking",
+    "method": "GET",
+    "code": 200,
+    "timeMs": 336,
+    "pass": true,
+    "note": "Matched pattern: To Airport|From Airport|Non-Airport"
+  },
+  {
+    "name": "Quote page",
+    "url": "https://www.jetsetdirect.com/quote?distance=25",
+    "method": "GET",
+    "code": 200,
+    "timeMs": 516,
+    "pass": true,
+    "note": "Matched pattern: Quote|Fare|Total|Estimate"
+  },
+  {
+    "name": "About",
+    "url": "https://www.jetsetdirect.com/about",
+    "method": "GET",
+    "code": 200,
+    "timeMs": 316,
+    "pass": true,
+    "note": "Matched pattern: About|JetSet"
+  },
+  {
+    "name": "Contact",
+    "url": "https://www.jetsetdirect.com/contact",
+    "method": "GET",
+    "code": 200,
+    "timeMs": 292,
+    "pass": true,
+    "note": "Matched pattern: Contact|Email|Phone"
+  },
+  {
+    "name": "Site icon",
+    "url": "https://www.jetsetdirect.com/icon.png",
+    "method": "GET",
+    "code": 200,
+    "timeMs": 554,
+    "pass": true,
+    "note": ""
+  },
+  {
+    "name": "Favicon (legacy)",
+    "url": "https://www.jetsetdirect.com/favicon.ico",
+    "method": "GET",
+    "code": 200,
+    "timeMs": 631,
+    "pass": true,
+    "note": ""
+  },
+  {
+    "name": "Auth route",
+    "url": "https://www.jetsetdirect.com/api/auth",
+    "method": "GET",
+    "code": null,
+    "timeMs": 407,
+    "pass": false,
+    "note": "Response status code does not indicate success: 404 (Not Found)."
+  },
+  {
+    "name": "Stripe checkout",
+    "url": "https://www.jetsetdirect.com/api/stripe/checkout",
+    "method": "GET",
+    "code": null,
+    "timeMs": 491,
+    "pass": false,
+    "note": "Response status code does not indicate success: 405 (Method Not Allowed)."
+  },
+  {
+    "name": "Stripe webhook",
+    "url": "https://www.jetsetdirect.com/api/stripe/webhook",
+    "method": "GET",
+    "code": null,
+    "timeMs": 468,
+    "pass": false,
+    "note": "Response status code does not indicate success: 405 (Method Not Allowed)."
+  },
+  {
+    "name": "Invoice route",
+    "url": "https://www.jetsetdirect.com/api/stripe/invoice",
+    "method": "GET",
+    "code": null,
+    "timeMs": 343,
+    "pass": false,
+    "note": "Response status code does not indicate success: 405 (Method Not Allowed)."
+  }
+]

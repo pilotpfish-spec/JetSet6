@@ -1,4 +1,3 @@
-import AccountAddresses from "@/components/AccountAddresses";
 // app/account/page.tsx
 import { headers } from "next/headers";
 import Link from "next/link";
@@ -175,8 +174,6 @@ export default async function AccountPage() {
       <div className="text-sm text-gray-500">
         Not seeing data? Make sure you’re signed in, then refresh.
       </div>
-      <AccountAddresses />
-</main>
+    </main>
   );
 }
-

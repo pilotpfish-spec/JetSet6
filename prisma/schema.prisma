@@ -1,5 +1,3 @@
-// prisma/schema.prisma
-
 generator client {
   provider = "prisma-client-js"
 }
@@ -30,7 +28,7 @@ model User {
   accounts               Account[]
   bookings               Booking[]
   sessions               Session[]
-  addresses              Address[]   // NEW: saved addresses
+  addresses              Address[]
 }
 
 model Account {
@@ -70,21 +68,19 @@ model Booking {
   stripePriceId          String?
   stripeCurrentPeriodEnd DateTime?
 
-  // Relation
   user                   User          @relation(fields: [userId], references: [id], onDelete: Cascade)
 
-  // Optional fields for richer receipts/history
   pickupAddress          String?
   dropoffAddress         String?
-  totalCents             Int?          // fare in cents
-  receiptUrl             String?       // Stripe hosted receipt URL
+  totalCents             Int?
+  receiptUrl             String?
   notes                  String?
 }
 
 model Address {
   id         String   @id @default(cuid())
   userId     String
-  label      String              // e.g. "Home", "Office"
+  label      String
   line1      String
   line2      String?
   city       String
@@ -110,6 +106,8 @@ enum UserRole {
 
 enum BookingStatus {
   PENDING
+  AWAITING_PAYMENT
+  PAID
   CONFIRMED
   CANCELLED
 }

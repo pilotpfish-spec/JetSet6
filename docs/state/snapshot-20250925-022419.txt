@@ -1,0 +1,42 @@
+JetSet6 State Snapshot 20250925-022419
+Root: C:\JetSetNew6
+
+=== Git ===
+Branch: force-deploy
+Last commit: affc4cb 2025-09-25 00:14:59 -0500 fix(auth): use [...nextauth] + add /api/auth health endpoint (200)
+
+=== Key Files ===
+[MISS] app\api\auth\[...nextauth]\route.ts
+[FOUND] app\providers.tsx
+[FOUND] lib\auth.ts
+[FOUND] lib\stripe.ts
+[FOUND] lib\prisma.ts
+[FOUND] lib\fareCalculator.ts
+[FOUND] lib\quoteService.ts
+[FOUND] app\quote\page.tsx
+[FOUND] app\booking\page.tsx
+[FOUND] app\account\page.tsx
+[MISS] app\admin\page.tsx
+[FOUND] prisma\schema.prisma
+[FOUND] next.config.js
+[FOUND] package.json
+
+=== Prisma Schema Checks ===
+prisma validate: Environment variables loaded from .env Prisma schema loaded from prisma\schema.prisma The schema at prisma\schema.prisma is valid ≡ƒÜÇ
+[HAS] model Booking
+[HAS] BookingStatus
+[HAS] stripeCustomerId
+[NO] scheduledAt
+[HAS] pickup
+[HAS] dropoff
+[NO] priceCents
+[HAS] status
+
+=== HTTP Probes ===
+GET /api/auth -> 200
+GET /api/stripe/checkout -> ERROR 405 Response status code does not indicate success: 405 (Method Not Allowed).
+GET /api/stripe/webhook -> ERROR 405 Response status code does not indicate success: 405 (Method Not Allowed).
+GET /account -> 200
+GET /admin -> ERROR 404 Response status code does not indicate success: 404 (Not Found).
+
+Saved: C:\JetSetNew6\docs\state\snapshot-20250925-022419.txt

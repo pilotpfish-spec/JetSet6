@@ -40,7 +40,10 @@ async function sendWithMailgun(to: string, subject: string, text: string, html: 
 
 export const authOptions: NextAuthOptions = {
   adapter: PrismaAdapter(prisma) as any,
-  session: { strategy: "jwt" },
+
+  // ✅ Fix: persist sessions in the database (not JWT-only)
+  session: { strategy: "database" },
+
   useSecureCookies,
 
   providers: [
@@ -72,7 +75,6 @@ export const authOptions: NextAuthOptions = {
   },
 
   callbacks: {
-    // Keep redirects on our own origin
     async redirect({ url, baseUrl }) {
       try {
         const target = new URL(url, baseUrl);

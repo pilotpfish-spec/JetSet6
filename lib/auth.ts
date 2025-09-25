@@ -42,7 +42,7 @@ export const authOptions: NextAuthOptions = {
   adapter: PrismaAdapter(prisma) as any,
 
   // ✅ Fix: persist sessions in the database (not JWT-only)
-  session: { strategy: "database" },
+  session: { strategy: "jwt" },
 
   useSecureCookies,
 

@@ -68,7 +68,11 @@ export default function AccountPage() {
 
   async function cancelBooking(id: string) {
     await fetch(`/api/bookings/${id}`, { method: "DELETE" });
-    setBookings((b) => b.filter((bk) => bk.id !== id));
+    setBookings((b) =>
+      b.map((bk) =>
+        bk.id === id ? { ...bk, status: "CANCELLED" } : bk
+      )
+    );
   }
 
   async function deleteAddress(id: string) {
@@ -94,32 +98,40 @@ export default function AccountPage() {
       <div className="rounded border p-4 shadow bg-white">
         <h2 className="text-lg font-semibold mb-2">Upcoming Bookings</h2>
         {bookings.length === 0 && <p>No bookings found.</p>}
-        {bookings.map((b) => (
-          <div key={b.id} className="mb-3 border-b pb-2">
-            <p className="font-medium">
-              {b.pickupAddress} → {b.dropoffAddress}
-            </p>
-            <p className="text-sm text-gray-600">
-              {new Date(b.scheduledAt).toLocaleString()} — $
-              {(b.priceCents / 100).toFixed(2)}
-            </p>
-            <p className="text-sm">Status: {b.status}</p>
-            <div className="space-x-2 mt-1">
-              <Link
-                href={`/booking?modify=${b.id}`}
-                className="rounded bg-yellow-500 px-2 py-1 text-white hover:opacity-90"
-              >
-                Modify
-              </Link>
-              <button
-                onClick={() => cancelBooking(b.id)}
-                className="rounded bg-red-600 px-2 py-1 text-white hover:opacity-90"
-              >
-                Cancel
-              </button>
+        {bookings.map((b) => {
+          const isCancelled = b.status === "CANCELLED";
+          return (
+            <div key={b.id} className="mb-3 border-b pb-2">
+              <p className="font-medium">
+                {b.pickupAddress || "Unknown Pickup"} → {b.dropoffAddress || "Unknown Dropoff"}
+              </p>
+              <p className="text-sm text-gray-600">
+                {new Date(b.scheduledAt).toLocaleString()} — $
+                {(b.priceCents / 100).toFixed(2)}
+              </p>
+              <p className={`text-sm font-semibold ${isCancelled ? "text-red-600" : ""}`}>
+                Status: {b.status}
+              </p>
+
+              {!isCancelled && (
+                <div className="space-x-2 mt-1">
+                  <Link
+                    href={`/booking?modify=${b.id}`}
+                    className="rounded bg-yellow-500 px-2 py-1 text-white hover:opacity-90"
+                  >
+                    Modify
+                  </Link>
+                  <button
+                    onClick={() => cancelBooking(b.id)}
+                    className="rounded bg-red-600 px-2 py-1 text-white hover:opacity-90"
+                  >
+                    Cancel
+                  </button>
+                </div>
+              )}
             </div>
-          </div>
-        ))}
+          );
+        })}
       </div>
 
       {/* Saved Addresses */}

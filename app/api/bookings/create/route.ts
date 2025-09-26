@@ -43,6 +43,7 @@ export async function POST(req: Request) {
   }
 
   try {
+    // 1. Create booking
     const booking = await prisma.booking.create({
       data: {
         userId: user.id,
@@ -51,13 +52,65 @@ export async function POST(req: Request) {
         scheduledAt: new Date(scheduledAt),
         date: new Date(), // legacy "date" field
         priceCents: Number(priceCents),
-        totalCents: Number(priceCents), // ✅ new: keep in sync
+        totalCents: Number(priceCents), // keep in sync
         notes,
-        status: "PENDING", // ✅ matches Prisma enum
+        status: "PENDING",
       },
     });
 
-    // Fire-and-forget notify hook (optional)
+    // 2. Save pickup & dropoff addresses into Address table (if provided)
+    const addressOps: any[] = [];
+    if (pickupAddress) {
+      addressOps.push(
+        prisma.address.upsert({
+          where: {
+            userId_label: {
+              userId: user.id,
+              label: "Pickup",
+            },
+          },
+          update: {
+            line1: pickupAddress,
+          },
+          create: {
+            userId: user.id,
+            label: "Pickup",
+            line1: pickupAddress,
+            city: "",
+            state: "",
+            postalCode: "",
+          },
+        })
+      );
+    }
+    if (dropoffAddress) {
+      addressOps.push(
+        prisma.address.upsert({
+          where: {
+            userId_label: {
+              userId: user.id,
+              label: "Dropoff",
+            },
+          },
+          update: {
+            line1: dropoffAddress,
+          },
+          create: {
+            userId: user.id,
+            label: "Dropoff",
+            line1: dropoffAddress,
+            city: "",
+            state: "",
+            postalCode: "",
+          },
+        })
+      );
+    }
+    if (addressOps.length > 0) {
+      await Promise.all(addressOps);
+    }
+
+    // 3. Fire-and-forget notify hook (optional)
     fetch(`${process.env.NEXT_PUBLIC_APP_URL}/api/bookings/notify`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -83,4 +136,5 @@ export async function POST(req: Request) {
     );
   }
 }
+
 

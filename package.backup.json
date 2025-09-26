@@ -1,0 +1,32 @@
+{
+  "name": "jetsetdirect",
+  "version": "1.0.0",
+  "private": true,
+  "scripts": {
+    "dev": "next dev",
+    "build": "prisma generate && next build",
+    "start": "next start",
+    "lint": "next lint"
+  },
+  "dependencies": {
+    "@auth/prisma-adapter": "^2.10.0",
+    "@prisma/client": "5.17.0",
+    "bcryptjs": "^3.0.2",
+    "next": "14.2.5",
+    "next-auth": "^4.24.11",
+    "react": "18.2.0",
+    "react-dom": "18.2.0",
+    "stripe": "^18.5.0",
+    "zod": "^4.1.11"
+  },
+  "devDependencies": {
+    "@tailwindcss/postcss": "^4",
+    "@types/node": "^24.5.2",
+    "@types/react": "^19.1.13",
+    "autoprefixer": "^10",
+    "postcss": "^8",
+    "prisma": "5.17.0",
+    "tailwindcss": "^4.1.13",
+    "typescript": "5.0.4"
+  }
+}

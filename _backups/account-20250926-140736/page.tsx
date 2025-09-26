@@ -1,8 +1,10 @@
+// C:\JetSetNew6\app\account\page.tsx
 "use client";
 
 import { useSession, signIn } from "next-auth/react";
 import { useEffect, useState } from "react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 
 type UserProfile = {
   id: string;
@@ -30,6 +32,7 @@ type Address = {
 
 export default function AccountPage() {
   const { status } = useSession();
+  const router = useRouter();
 
   const [profile, setProfile] = useState<UserProfile | null>(null);
   const [bookings, setBookings] = useState<Booking[]>([]);
@@ -40,8 +43,8 @@ export default function AccountPage() {
     if (status !== "authenticated") return;
     Promise.all([
       fetch("/api/user").then((r) => r.json()),
-      fetch("/api/bookings").then((r) => r.json()),
-      fetch("/api/addresses").then((r) => r.json()),
+      fetch("/api/bookings", { cache: "no-store" }).then((r) => r.json()),
+      fetch("/api/addresses", { cache: "no-store" }).then((r) => r.json()),
     ])
       .then(([user, bookings, addresses]) => {
         setProfile(user);
@@ -67,12 +70,12 @@ export default function AccountPage() {
   }
 
   async function cancelBooking(id: string) {
-    await fetch(`/api/bookings/${id}`, { method: "DELETE" });
+    await fetch(`/api/bookings?id=${id}`, { method: "DELETE" });
     setBookings((b) => b.filter((bk) => bk.id !== id));
   }
 
   async function deleteAddress(id: string) {
-    await fetch(`/api/addresses/${id}`, { method: "DELETE" });
+    await fetch(`/api/addresses?id=${id}`, { method: "DELETE" });
     setAddresses((a) => a.filter((addr) => addr.id !== id));
   }
 
@@ -149,3 +152,5 @@ export default function AccountPage() {
     </div>
   );
 }
+
+

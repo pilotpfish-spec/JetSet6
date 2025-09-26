@@ -1,4 +1,3 @@
-// app/api/bookings/route.ts
 import { NextResponse } from "next/server";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
@@ -52,7 +51,8 @@ export async function PUT(req: Request) {
   return NextResponse.json(updated);
 }
 
-// DELETE /api/bookings?id=BOOKING_ID
+// DELETE /api/bookings?id=BOOKING_ID (legacy)
+// For direct /api/bookings/[id] deletes, use the [id]/route.ts file
 export async function DELETE(req: Request) {
   const session = await getServerSession(authOptions);
   if (!session?.user?.email) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });

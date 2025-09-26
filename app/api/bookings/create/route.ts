@@ -1,52 +1,63 @@
+// app/api/bookings/create/route.ts
 import { NextResponse } from "next/server";
+import { getServerSession } from "next-auth";
+import { authOptions } from "@/lib/auth";
+import { prisma } from "@/lib/prisma";
+
+export const runtime = "nodejs";
 
 export async function POST(req: Request) {
-  const data = await req.json();
+  const session = await getServerSession(authOptions);
+  if (!session?.user?.email) {
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
+
+  // Find the actual Prisma user
+  const user = await prisma.user.findUnique({
+    where: { email: session.user.email },
+  });
+  if (!user) return NextResponse.json({ error: "User not found" }, { status: 404 });
+
+  const data = await req.json().catch(() => ({}));
   const {
-    paymentMethod = "pay_later",
-    customerName = "Guest",
-    customerEmail = "",
-    phone = "",
-    date = "",
     pickupAddress = "",
     dropoffAddress = "",
-    distance = 0,
-    fare = 0,
+    scheduledAt,
+    priceCents,
     notes = "",
   } = data || {};
 
-  let dbSaved = false;
-  let bookingId: string | null = null;
+  if (!scheduledAt || !priceCents) {
+    return NextResponse.json({ error: "Missing scheduledAt or priceCents" }, { status: 400 });
+  }
 
   try {
-    const { prisma } = await import("@/lib/prisma");
-    const result: any = await (prisma as any).booking.create({
+    const booking = await prisma.booking.create({
       data: {
-        customerName,
-        customerEmail,
-        phone,
-        date,
+        userId: user.id,
         pickupAddress,
         dropoffAddress,
-        distance,
-        fare,
+        scheduledAt: new Date(scheduledAt),
+        date: new Date(), // legacy field, keep "now"
+        priceCents: Number(priceCents),
         notes,
-        paymentMethod, // "pay_later" | "card"
-        status: paymentMethod === "pay_later" ? "PENDING" : "UNPAID",
+        status: "PENDING",
       },
     });
-    bookingId = result?.id ?? null;
-    dbSaved = true;
-  } catch { dbSaved = false; }
 
-  try {
-    await fetch(`${process.env.NEXT_PUBLIC_APP_URL || ""}/api/bookings/notify`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ ...data, paymentMethod }),
-      cache: "no-store",
-    });
-  } catch {}
+    // Optional: send notify webhook
+    try {
+      await fetch(`${process.env.NEXT_PUBLIC_APP_URL}/api/bookings/notify`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ bookingId: booking.id, pickupAddress, dropoffAddress }),
+        cache: "no-store",
+      });
+    } catch {}
 
-  return NextResponse.json({ ok: true, bookingId, dbSaved, paymentMethod });
+    return NextResponse.json({ ok: true, bookingId: booking.id });
+  } catch (err) {
+    console.error("Booking creation failed", err);
+    return NextResponse.json({ error: "Failed to create booking" }, { status: 500 });
+  }
 }

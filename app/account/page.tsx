@@ -36,6 +36,11 @@ export default function AccountPage() {
   const [addresses, setAddresses] = useState<Address[]>([]);
   const [error, setError] = useState<string | null>(null);
 
+  // Add address form state
+  const [newLabel, setNewLabel] = useState("");
+  const [newLine1, setNewLine1] = useState("");
+  const [savingAddress, setSavingAddress] = useState(false);
+
   useEffect(() => {
     if (status !== "authenticated") return;
     Promise.all([
@@ -80,6 +85,40 @@ export default function AccountPage() {
     setAddresses((a) => a.filter((addr) => addr.id !== id));
   }
 
+  async function addAddress() {
+    if (!newLine1.trim()) {
+      alert("Please enter an address");
+      return;
+    }
+    setSavingAddress(true);
+    try {
+      const res = await fetch("/api/addresses", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          label: newLabel || "Saved Address",
+          line1: newLine1,
+        }),
+      });
+
+      if (!res.ok) {
+        const txt = await res.text();
+        alert(txt || "Failed to save address");
+        return;
+      }
+
+      const addr = await res.json();
+      setAddresses((prev) => [addr, ...prev]);
+      setNewLabel("");
+      setNewLine1("");
+    } catch (e) {
+      console.error("Add address failed", e);
+      alert("Failed to save address");
+    } finally {
+      setSavingAddress(false);
+    }
+  }
+
   return (
     <div className="p-8 space-y-10 max-w-4xl mx-auto">
       <h1 className="text-2xl font-bold">My Account</h1>
@@ -103,13 +142,18 @@ export default function AccountPage() {
           return (
             <div key={b.id} className="mb-3 border-b pb-2">
               <p className="font-medium">
-                {b.pickupAddress || "Unknown Pickup"} → {b.dropoffAddress || "Unknown Dropoff"}
+                {b.pickupAddress || "Unknown Pickup"} →{" "}
+                {b.dropoffAddress || "Unknown Dropoff"}
               </p>
               <p className="text-sm text-gray-600">
                 {new Date(b.scheduledAt).toLocaleString()} — $
                 {(b.priceCents / 100).toFixed(2)}
               </p>
-              <p className={`text-sm font-semibold ${isCancelled ? "text-red-600" : ""}`}>
+              <p
+                className={`text-sm font-semibold ${
+                  isCancelled ? "text-red-600" : ""
+                }`}
+              >
                 Status: {b.status}
               </p>
 
@@ -151,12 +195,31 @@ export default function AccountPage() {
             </button>
           </div>
         ))}
-        <Link
-          href="/booking"
-          className="mt-2 inline-block rounded bg-blue-600 px-3 py-1 text-white hover:bg-blue-700"
-        >
-          Add Address
-        </Link>
+
+        {/* Inline add form */}
+        <div className="mt-4 space-y-2">
+          <input
+            type="text"
+            placeholder="Label (e.g. Home, Office)"
+            value={newLabel}
+            onChange={(e) => setNewLabel(e.target.value)}
+            className="w-full rounded border px-3 py-2"
+          />
+          <input
+            type="text"
+            placeholder="Street, City, State Zip"
+            value={newLine1}
+            onChange={(e) => setNewLine1(e.target.value)}
+            className="w-full rounded border px-3 py-2"
+          />
+          <button
+            onClick={addAddress}
+            disabled={savingAddress}
+            className="rounded bg-blue-600 px-3 py-1 text-white hover:bg-blue-700 disabled:opacity-60"
+          >
+            {savingAddress ? "Saving…" : "Add Address"}
+          </button>
+        </div>
       </div>
     </div>
   );

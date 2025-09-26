@@ -1,4 +1,4 @@
-import "../styles/globals.css";
+import "@/styles/globals.css"; // ✅ fixed import
 import { Inter } from "next/font/google";
 import Link from "next/link";
 import Image from "next/image";
@@ -25,7 +25,7 @@ export default async function RootLayout({
     <html lang="en">
       <body className={inter.className}>
         {/* Header */}
-        <header className="flex justify-between items-center px-8 py-4 bg-[#0a0a23] text-white">
+        <header className="flex justify-between items-center px-8 py-4 bg-[#0a1a2f] text-white">
           <Link href="/" className="flex items-center space-x-3">
             <Image
               src="/logo.png"
@@ -42,7 +42,6 @@ export default async function RootLayout({
               Home
             </Link>
 
-            {/* Only show Account + Sign out if signed in */}
             {session ? (
               <>
                 <Link href="/account" className="hover:underline">
@@ -58,7 +57,7 @@ export default async function RootLayout({
 
             <Link
               href="/booking"
-              className="px-4 py-2 rounded-lg bg-white text-[#0a0a23] font-semibold hover:bg-gray-200 transition"
+              className="px-4 py-2 rounded-lg bg-white text-[#0a1a2f] font-semibold hover:bg-gray-200 transition"
             >
               Book Now
             </Link>
@@ -71,13 +70,11 @@ export default async function RootLayout({
           </nav>
         </header>
 
-        {/* Main content wrapped in Providers */}
         <Providers>
           <main>{children}</main>
         </Providers>
 
-        {/* Footer */}
-        <footer className="mt-12 py-6 bg-[#0a0a23] text-white text-center">
+        <footer className="mt-12 py-6 bg-[#0a1a2f] text-white text-center">
           <p className="text-sm">© {new Date().getFullYear()} JetSet Direct</p>
         </footer>
       </body>

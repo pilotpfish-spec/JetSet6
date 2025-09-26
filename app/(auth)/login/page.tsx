@@ -1,8 +1,8 @@
-// C:\JetSetNew6\app\(auth)\login\page.tsx
 "use client";
 
 import Image from "next/image";
 import Link from "next/link";
+import { signIn } from "next-auth/react";
 
 export default function LoginPage() {
   return (
@@ -78,8 +78,8 @@ export default function LoginPage() {
         </div>
 
         {/* Google Login */}
-        <a
-          href="/api/auth/signin/google"
+        <button
+          onClick={() => signIn("google", { callbackUrl: "/account" })}
           className="flex w-full items-center justify-center gap-3 rounded-lg border border-gray-300 py-3 text-gray-700 font-medium transition hover:bg-gray-50"
         >
           <svg
@@ -105,7 +105,7 @@ export default function LoginPage() {
             />
           </svg>
           Continue with Google
-        </a>
+        </button>
 
         {/* Sign up link */}
         <p className="mt-6 text-center text-sm text-gray-600">
@@ -123,3 +123,4 @@ export default function LoginPage() {
     </div>
   );
 }
+

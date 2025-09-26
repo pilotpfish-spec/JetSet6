@@ -6,7 +6,7 @@ import { useSearchParams, useRouter } from "next/navigation";
 const JETSET_NAVY = "#0a1a2f";
 const JETSET_YELLOW = "#FFD700";
 
-// Same fare logic as booking page
+// Fare logic (same as booking page)
 function calcFareCents(miles: number): number {
   const base = 45; // USD
   const extraMiles = Math.max(0, miles - 20);
@@ -22,12 +22,11 @@ export default function QuoteClient() {
   const minutes = Number(search.get("minutes") ?? "");
   const pickupAddress = (search.get("from") || "").trim();
   const dropoffAddress = (search.get("to") || "").trim();
-  const airport = (search.get("airport") || "").trim();     // e.g., DFW or DAL
-  const terminal = (search.get("terminal") || "").trim();   // e.g., Terminal C
-  const dateIso = (search.get("dateIso") || "").trim();     // ISO datetime (optional)
+  const airport = (search.get("airport") || "").trim();
+  const terminal = (search.get("terminal") || "").trim();
+  const dateIso = (search.get("dateIso") || "").trim();
 
   const valid = Number.isFinite(miles);
-
   const cents = useMemo(() => (valid ? calcFareCents(miles) : 0), [valid, miles]);
   const dollars = useMemo(() => (cents / 100).toFixed(2), [cents]);
 
@@ -35,7 +34,7 @@ export default function QuoteClient() {
   const [loadingPayNow, setLoadingPayNow] = useState(false);
   const [loadingPayLater, setLoadingPayLater] = useState(false);
 
-  // Make the amount available to checkout fallback
+  // Cache quote in case of reload
   useEffect(() => {
     if (valid) {
       try {
@@ -44,31 +43,48 @@ export default function QuoteClient() {
     }
   }, [valid, cents]);
 
+  // Always persist booking before pay now/pay later
+  async function createBooking() {
+    const res = await fetch("/api/bookings/create", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        pickupAddress,
+        dropoffAddress,
+        scheduledAt: dateIso || new Date().toISOString(),
+        priceCents: cents,
+        notes: "Created from quote flow",
+      }),
+    });
+
+    const data = await res.json();
+    if (!res.ok || !data.bookingId) throw new Error(data.error || "Failed to create booking");
+    return data.bookingId as string;
+  }
+
   async function handleBookNow() {
     if (!valid) return;
     setLoadingPayNow(true);
+
     try {
+      const bookingId = await createBooking();
+
       const res = await fetch("/api/stripe/checkout", {
         method: "POST",
         headers: { "content-type": "application/json" },
         body: JSON.stringify({
-          unitAmount: cents,          // cents
-          bookingId: "temp-id-123",   // replace when you persist bookings
-          email: email || undefined,  // optional for checkout
+          unitAmount: cents,
+          bookingId,
+          email: email || undefined,
         }),
       });
 
-      if (!res.ok) {
-        const t = await res.text().catch(() => "");
-        alert(t || "Could not start checkout.");
-        return;
-      }
-
       const data = await res.json();
-      if (data?.url) window.location.href = data.url;
-      else alert("Checkout URL missing.");
+      if (!res.ok || !data?.url) throw new Error("Stripe checkout failed");
+
+      window.location.href = data.url;
     } catch (e: any) {
-      alert(e?.message || "Unexpected error starting checkout.");
+      alert(e?.message || "Unexpected error during checkout.");
     } finally {
       setLoadingPayNow(false);
     }
@@ -76,26 +92,25 @@ export default function QuoteClient() {
 
   async function handleBookNowPayLater() {
     if (!valid) return;
-
-    // Require an email so Stripe can send the hosted invoice
     if (!email || !/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email)) {
       alert("Please enter a valid email to receive your invoice.");
       return;
     }
 
     setLoadingPayLater(true);
+
     try {
-      // Create + send a Stripe hosted invoice including trip context
+      const bookingId = await createBooking();
+
       const invRes = await fetch("/api/stripe/invoice", {
         method: "POST",
         headers: { "content-type": "application/json" },
         body: JSON.stringify({
           unitAmount: cents,
           email,
-          bookingId: "temp-id-123", // replace after you persist bookings
+          bookingId,
           description: "JetSet Ride — Pay Later",
           daysUntilDue: 7,
-          // Trip details for invoice display
           dateIso: dateIso || new Date().toISOString(),
           pickupAddress,
           dropoffAddress,
@@ -104,34 +119,24 @@ export default function QuoteClient() {
         }),
       });
 
-      if (!invRes.ok) {
-        const t = await invRes.text().catch(() => "");
-        alert(t || "Could not create invoice.");
-        return;
-      }
-
       const inv = await invRes.json();
-      if (!inv?.url) {
-        alert("Invoice URL missing.");
-        return;
-      }
+      if (!invRes.ok || !inv?.url) throw new Error("Failed to create invoice");
 
-      // (Fire-and-forget) Send a confirmation email via Mailgun with details + invoice link
+      // Fire-and-forget confirmation email
       fetch("/api/mailgun/bookLater", {
         method: "POST",
         headers: { "content-type": "application/json" },
         body: JSON.stringify({
           toEmail: email,
           invoiceUrl: inv.url,
-          bookingId: "temp-id-123",
+          bookingId,
           fareCents: cents,
           pickupAddress,
           dropoffAddress,
           dateIso: dateIso || new Date().toISOString(),
         }),
-      }).catch(() => { /* ignore mail fallback errors here */ });
+      }).catch(() => {});
 
-      // Open the hosted invoice in a new tab so the rider can pay when ready
       window.open(inv.url, "_blank", "noopener,noreferrer");
     } catch (e: any) {
       alert(e?.message || "Unexpected error creating invoice.");

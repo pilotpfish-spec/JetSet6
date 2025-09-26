@@ -16,19 +16,30 @@ export async function POST(req: Request) {
   const user = await prisma.user.findUnique({
     where: { email: session.user.email },
   });
-  if (!user) return NextResponse.json({ error: "User not found" }, { status: 404 });
+  if (!user) {
+    return NextResponse.json({ error: "User not found" }, { status: 404 });
+  }
 
-  const data = await req.json().catch(() => ({}));
+  let data: any = {};
+  try {
+    data = await req.json();
+  } catch {
+    return NextResponse.json({ error: "Invalid JSON body" }, { status: 400 });
+  }
+
   const {
     pickupAddress = "",
     dropoffAddress = "",
     scheduledAt,
     priceCents,
     notes = "",
-  } = data || {};
+  } = data;
 
   if (!scheduledAt || !priceCents) {
-    return NextResponse.json({ error: "Missing scheduledAt or priceCents" }, { status: 400 });
+    return NextResponse.json(
+      { error: "Missing required fields: scheduledAt or priceCents" },
+      { status: 400 }
+    );
   }
 
   try {
@@ -38,26 +49,38 @@ export async function POST(req: Request) {
         pickupAddress,
         dropoffAddress,
         scheduledAt: new Date(scheduledAt),
-        date: new Date(), // legacy field, keep "now"
+        date: new Date(), // legacy "date" field
         priceCents: Number(priceCents),
+        totalCents: Number(priceCents), // ✅ new: keep in sync
         notes,
-        status: "PENDING",
+        status: "PENDING", // ✅ matches Prisma enum
       },
     });
 
-    // Optional: send notify webhook
-    try {
-      await fetch(`${process.env.NEXT_PUBLIC_APP_URL}/api/bookings/notify`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ bookingId: booking.id, pickupAddress, dropoffAddress }),
-        cache: "no-store",
-      });
-    } catch {}
+    // Fire-and-forget notify hook (optional)
+    fetch(`${process.env.NEXT_PUBLIC_APP_URL}/api/bookings/notify`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        bookingId: booking.id,
+        pickupAddress,
+        dropoffAddress,
+      }),
+    }).catch(() => {
+      // don’t block booking creation if notify fails
+    });
 
-    return NextResponse.json({ ok: true, bookingId: booking.id });
+    return NextResponse.json({
+      ok: true,
+      bookingId: booking.id,
+      booking,
+    });
   } catch (err) {
-    console.error("Booking creation failed", err);
-    return NextResponse.json({ error: "Failed to create booking" }, { status: 500 });
+    console.error("Booking creation failed:", err);
+    return NextResponse.json(
+      { error: "Failed to create booking" },
+      { status: 500 }
+    );
   }
 }
+

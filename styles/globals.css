@@ -1,3 +1,7 @@
+@import "tailwindcss";
+@plugin "@tailwindcss/postcss";
+
+/* Core layers */
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
@@ -24,12 +28,17 @@
     --input: 0 0% 89.8%;
     --ring: 0 0% 3.9%;
     --radius: 0.5rem;
-    
+
     --chart-1: 271.5 81.3% 55.9%;
     --chart-2: 270 95% 75%;
     --chart-3: 270 91% 65%;
     --chart-4: 269 97% 85%;
     --chart-5: 269 100% 92%;
+
+    /* === JetSet Direct Brand Theme === */
+    --brand-navy: #0a1a2f;
+    --brand-white: #ffffff;
+    --brand-accent: #f5d547;
   }
 
   .dark {
@@ -52,12 +61,6 @@
     --border: 0 0% 14.9%;
     --input: 0 0% 14.9%;
     --ring: 0 0% 83.1%;
-
-    --chart-1: 271.5 81.3% 55.9%;
-    --chart-2: 270 95% 75%;
-    --chart-3: 270 91% 65%;
-    --chart-4: 269 97% 85%;
-    --chart-5: 269 100% 92%;
   }
 }
 
@@ -65,10 +68,12 @@
   * {
     @apply border-border;
   }
-
   body {
     @apply bg-background text-foreground;
     font-feature-settings: "rlig" 1, "calt" 1;
+    font-family: 'Inter', sans-serif;
+    background-color: var(--brand-white);
+    color: var(--brand-navy);
   }
 }
 
@@ -76,7 +81,6 @@
   .step {
     counter-increment: step;
   }
-
   .step:before {
     @apply absolute w-9 h-9 bg-muted rounded-full font-mono font-medium text-center text-base inline-flex items-center justify-center -indent-px border-4 border-background;
     @apply ml-[-50px] mt-[-4px];
@@ -89,43 +93,13 @@
   -webkit-background-clip: text;
   -webkit-text-fill-color: transparent;
   background-clip: text;
-}/* === JetSet Direct Brand Theme === */
-:root {
-  --brand-navy: #0a1a2f;
-  --brand-white: #ffffff;
-  --brand-accent: #f5d547; /* subtle gold accent if needed */
 }
 
-body {
-  background-color: var(--brand-white);
-  color: var(--brand-navy);
-  font-family: 'Inter', sans-serif;
-}
-
+/* Brand sections */
 header {
   background-color: var(--brand-navy);
 }
-
 footer {
   background-color: var(--brand-navy);
-}
-/* === JetSet Direct Brand Theme === */
-:root {
-  --brand-navy: #0a1a2f;
-  --brand-white: #ffffff;
-  --brand-accent: #f5d547; /* subtle gold accent if needed */
-}
-
-body {
-  background-color: var(--brand-white);
-  color: var(--brand-navy);
-  font-family: 'Inter', sans-serif;
-}
-
-header {
-  background-color: var(--brand-navy);
-}
-
-footer {
-  background-color: var(--brand-navy);
+  color: var(--brand-white);
 }

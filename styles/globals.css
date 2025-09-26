@@ -1,11 +1,10 @@
+/* === Tailwind v4 Entry === */
 @import "tailwindcss";
-@plugin "@tailwindcss/postcss";
 
-/* Core layers */
-@tailwind base;
-@tailwind components;
-@tailwind utilities;
+/* Tell Tailwind what files to scan for classnames */
+@source "../app/**/*.{ts,tsx,mdx}" "../components/**/*.{ts,tsx}" "../content/**/*.{md,mdx}";
 
+/* === Base Layer Variables === */
 @layer base {
   :root {
     --background: 0 0% 100%;
@@ -35,7 +34,7 @@
     --chart-4: 269 97% 85%;
     --chart-5: 269 100% 92%;
 
-    /* === JetSet Direct Brand Theme === */
+    /* === JetSet Direct Brand Colors === */
     --brand-navy: #0a1a2f;
     --brand-white: #ffffff;
     --brand-accent: #f5d547;
@@ -61,44 +60,53 @@
     --border: 0 0% 14.9%;
     --input: 0 0% 14.9%;
     --ring: 0 0% 83.1%;
-  }
-}
 
-@layer base {
-  * {
-    @apply border-border;
+    --chart-1: 271.5 81.3% 55.9%;
+    --chart-2: 270 95% 75%;
+    --chart-3: 270 91% 65%;
+    --chart-4: 269 97% 85%;
+    --chart-5: 269 100% 92%;
   }
+
+  * {
+    border-color: hsl(var(--border));
+  }
+
   body {
-    @apply bg-background text-foreground;
-    font-feature-settings: "rlig" 1, "calt" 1;
-    font-family: 'Inter', sans-serif;
     background-color: var(--brand-white);
     color: var(--brand-navy);
+    font-family: 'Inter', sans-serif;
+    font-feature-settings: "rlig" 1, "calt" 1;
   }
 }
 
+/* === Utility Layer === */
 @layer utilities {
   .step {
     counter-increment: step;
   }
+
   .step:before {
-    @apply absolute w-9 h-9 bg-muted rounded-full font-mono font-medium text-center text-base inline-flex items-center justify-center -indent-px border-4 border-background;
+    @apply absolute w-9 h-9 bg-muted rounded-full font-mono font-medium text-center text-base inline-flex items-center justify-center -indent-px border-4;
+    border-color: var(--background);
     @apply ml-[-50px] mt-[-4px];
     content: counter(step);
   }
+
+  .text-gradient_indigo-purple {
+    background: linear-gradient(90deg, #6366f1 0%, rgb(168 85 247 / 0.8) 100%);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    background-clip: text;
+  }
 }
 
-.text-gradient_indigo-purple {
-  background: linear-gradient(90deg, #6366f1 0%, rgb(168 85 247 / 0.8) 100%);
-  -webkit-background-clip: text;
-  -webkit-text-fill-color: transparent;
-  background-clip: text;
-}
-
-/* Brand sections */
+/* === Brand Theming === */
 header {
   background-color: var(--brand-navy);
+  color: var(--brand-white);
 }
+
 footer {
   background-color: var(--brand-navy);
   color: var(--brand-white);

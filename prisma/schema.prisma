@@ -72,12 +72,14 @@ model Booking {
 
   pickupAddress          String?
   dropoffAddress         String?
+  airport                String?       // ✅ New field
+  terminal               String?       // ✅ New field
   totalCents             Int?
   receiptUrl             String?
   notes                  String?
 
-  scheduledAt DateTime
-  priceCents Int
+  scheduledAt            DateTime
+  priceCents             Int
 }
 
 model Address {

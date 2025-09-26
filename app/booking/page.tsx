@@ -243,8 +243,18 @@ export default function BookingPage() {
       sessionStorage.setItem("JETSET_QUOTE_TOTAL_CENTS", String(cents));
     } catch {}
 
-    // 👉 now include minutes in the URL so /quote can always render
-    router.push(`/quote?distance=${miles.toFixed(1)}&minutes=${minutes.toFixed(0)}`);
+    // ✅ include full trip context in query string
+    const params = new URLSearchParams({
+      distance: miles.toFixed(1),
+      minutes: minutes.toFixed(0),
+      from: pickup?.formatted || "",
+      to: dropoff?.formatted || "",
+      airport,
+      terminal,
+      dateIso: `${rideDate}T${rideTime}:00`,
+    });
+
+    router.push(`/quote?${params.toString()}`);
   };
 
   // --- Stripe call + redirect (Confirm Booking) ---
@@ -254,8 +264,7 @@ export default function BookingPage() {
       return;
     }
 
-    // Prefer the stored quote; if missing, compute a fresh price.
-    let unitAmount = 4500; // default to $45.00
+    let unitAmount = 4500; // default to $45
     try {
       const stored = sessionStorage.getItem("JETSET_QUOTE_TOTAL_CENTS");
       if (stored && !Number.isNaN(Number(stored))) {
@@ -270,8 +279,8 @@ export default function BookingPage() {
     }
 
     const payload = {
-      unitAmount, // cents
-      bookingId: "temp-id-123", // replace with real booking id when you persist
+      unitAmount,
+      bookingId: "temp-id-123",
       email: session?.user?.email ?? undefined,
     };
 
@@ -288,7 +297,7 @@ export default function BookingPage() {
 
     const data = await res.json();
     if (data?.url) {
-      window.location.href = data.url; // Stripe Checkout
+      window.location.href = data.url;
     } else {
       alert("Checkout URL missing.");
     }

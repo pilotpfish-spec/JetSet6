@@ -33,6 +33,8 @@ export async function POST(req: Request) {
     scheduledAt,
     priceCents,
     notes = "",
+    airport = null,
+    terminal = null,
   } = data;
 
   if (!scheduledAt || !priceCents) {
@@ -49,6 +51,8 @@ export async function POST(req: Request) {
         userId: user.id,
         pickupAddress,
         dropoffAddress,
+        airport,
+        terminal,
         scheduledAt: new Date(scheduledAt),
         date: new Date(), // legacy "date" field
         priceCents: Number(priceCents),
@@ -118,6 +122,8 @@ export async function POST(req: Request) {
         bookingId: booking.id,
         pickupAddress,
         dropoffAddress,
+        airport,
+        terminal,
       }),
     }).catch(() => {
       // don’t block booking creation if notify fails
@@ -136,5 +142,3 @@ export async function POST(req: Request) {
     );
   }
 }
-
-

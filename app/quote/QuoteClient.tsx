@@ -51,6 +51,8 @@ export default function QuoteClient() {
       body: JSON.stringify({
         pickupAddress,
         dropoffAddress,
+        airport,
+        terminal,
         scheduledAt: dateIso || new Date().toISOString(),
         priceCents: cents,
         notes: "Created from quote flow",
@@ -133,6 +135,8 @@ export default function QuoteClient() {
           fareCents: cents,
           pickupAddress,
           dropoffAddress,
+          airport,
+          terminal,
           dateIso: dateIso || new Date().toISOString(),
         }),
       }).catch(() => {});
@@ -173,6 +177,13 @@ export default function QuoteClient() {
           )}
           <p><strong>Base:</strong> $45</p>
           <p><strong>Extra:</strong> {Math.max(0, miles - 20).toFixed(1)} × $1.50</p>
+
+          {/* ✅ Show addresses & trip details */}
+          {pickupAddress && <p><strong>Pickup:</strong> {pickupAddress}</p>}
+          {dropoffAddress && <p><strong>Drop-off:</strong> {dropoffAddress}</p>}
+          {airport && <p><strong>Airport:</strong> {airport}</p>}
+          {terminal && <p><strong>Terminal:</strong> {terminal}</p>}
+          {dateIso && <p><strong>Date/Time:</strong> {new Date(dateIso).toLocaleString()}</p>}
         </div>
 
         <div className="mt-6">
@@ -222,3 +233,4 @@ export default function QuoteClient() {
     </main>
   );
 }
+

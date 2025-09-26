@@ -14,6 +14,8 @@ type Booking = {
   id: string;
   pickupAddress: string | null;
   dropoffAddress: string | null;
+  airport: string | null;
+  terminal: string | null;
   scheduledAt: string;
   priceCents: number;
   status: string;
@@ -145,6 +147,12 @@ export default function AccountPage() {
                 {b.pickupAddress || "Unknown Pickup"} →{" "}
                 {b.dropoffAddress || "Unknown Dropoff"}
               </p>
+              {(b.airport || b.terminal) && (
+                <p className="text-sm text-gray-700">
+                  {b.airport ? `Airport: ${b.airport}` : ""}
+                  {b.terminal ? ` — Terminal: ${b.terminal}` : ""}
+                </p>
+              )}
               <p className="text-sm text-gray-600">
                 {new Date(b.scheduledAt).toLocaleString()} — $
                 {(b.priceCents / 100).toFixed(2)}
@@ -224,3 +232,4 @@ export default function AccountPage() {
     </div>
   );
 }
+

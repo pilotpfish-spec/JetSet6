@@ -1,6 +1,7 @@
+// C:\JetSetNew6\postcss.config.js
 module.exports = {
-  plugins: [
-    require("@tailwindcss/postcss"), // ✅ Tailwind v4 plugin
-    require("autoprefixer"),
-  ],
+  plugins: {
+    tailwindcss: {},
+    autoprefixer: {},
+  },
 };

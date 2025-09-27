@@ -2,14 +2,17 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { hash } from "bcryptjs";
+import jwt from "jsonwebtoken";
+
+const TOKEN_SECRET = process.env.NEXTAUTH_SECRET || "changeme";
 
 export async function POST(req: Request) {
   try {
-    const { email, password } = await req.json();
+    const { token, password } = await req.json();
 
-    if (!email || !password) {
+    if (!token || !password) {
       return NextResponse.json(
-        { error: "Email and password are required" },
+        { error: "Token and password are required" },
         { status: 400 }
       );
     }
@@ -17,6 +20,25 @@ export async function POST(req: Request) {
     if (password.length < 8) {
       return NextResponse.json(
         { error: "Password must be at least 8 characters" },
+        { status: 400 }
+      );
+    }
+
+    // Decode token to get email
+    let email: string | null = null;
+    try {
+      const decoded = jwt.verify(token, TOKEN_SECRET) as { email?: string };
+      email = decoded.email || null;
+    } catch {
+      return NextResponse.json(
+        { error: "Invalid or expired token" },
+        { status: 400 }
+      );
+    }
+
+    if (!email) {
+      return NextResponse.json(
+        { error: "Email not found in token" },
         { status: 400 }
       );
     }

@@ -1,8 +1,8 @@
-// C:\JetSetNew6\app\(auth)\register\set-password\page.tsx
 "use client";
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
+import { signIn } from "next-auth/react";
 
 export default function SetPasswordPage() {
   const [password, setPassword] = useState("");
@@ -32,12 +32,24 @@ export default function SetPasswordPage() {
         return;
       }
 
-      // ✅ Success — redirect straight to account
-      setStatus("Password set successfully. Redirecting...");
+      // ✅ Success — automatically sign in with the new password
+      setStatus("Password set successfully. Signing you in...");
       setPassword("");
-      setTimeout(() => {
+
+      const email = data.email || ""; // make sure your API returns email
+      const loginRes = await signIn("credentials", {
+        redirect: false,
+        email,
+        password,
+        callbackUrl: "/account",
+      });
+
+      if (loginRes?.error) {
+        setStatus("Password saved, but login failed. Please sign in manually.");
+        setTimeout(() => router.push("/login"), 1500);
+      } else {
         router.push("/account");
-      }, 1500);
+      }
     } catch (err) {
       console.error("Error setting password:", err);
       setStatus("Unexpected error.");

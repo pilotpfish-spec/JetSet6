@@ -13,8 +13,8 @@ export default function SetPasswordPage() {
     e.preventDefault();
     setStatus(null);
 
-    const pt = new URLSearchParams(window.location.search).get("pt");
-    if (!pt) {
+    const token = new URLSearchParams(window.location.search).get("pt");
+    if (!token) {
       setStatus("Missing token.");
       return;
     }
@@ -23,7 +23,7 @@ export default function SetPasswordPage() {
       const res = await fetch("/api/register/set-password", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ pt, password }),
+        body: JSON.stringify({ token, password }),
       });
 
       const data = await res.json();
@@ -36,10 +36,9 @@ export default function SetPasswordPage() {
       setStatus("Password set successfully. Signing you in...");
       setPassword("");
 
-      const email = data.email || ""; // make sure your API returns email
       const loginRes = await signIn("credentials", {
         redirect: false,
-        email,
+        email: data.email,
         password,
         callbackUrl: "/account",
       });

@@ -7,6 +7,8 @@ const TOKEN_SECRET = process.env.NEXTAUTH_SECRET || "changeme";
 
 export async function POST(req: Request) {
   try {
+    console.log("=== DEBUG: Running NEW token-based set-password route ===");
+
     const { token, password } = await req.json();
 
     if (!token || !password) {

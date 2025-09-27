@@ -1,15 +1,17 @@
-// C:\JetSetNew6\app\api\register\set-password\route.ts
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { hash } from "bcryptjs";
+import jwt from "jsonwebtoken";
+
+const TOKEN_SECRET = process.env.NEXTAUTH_SECRET || "changeme";
 
 export async function POST(req: Request) {
   try {
-    const { email, password } = await req.json();
+    const { token, password } = await req.json();
 
-    if (!email || !password) {
+    if (!token || !password) {
       return NextResponse.json(
-        { error: "Email and password are required" },
+        { error: "Token and password are required" },
         { status: 400 }
       );
     }
@@ -21,6 +23,26 @@ export async function POST(req: Request) {
       );
     }
 
+    // Decode token to get email
+    let email: string | null = null;
+    try {
+      const decoded = jwt.verify(token, TOKEN_SECRET) as { email?: string };
+      email = decoded.email || null;
+    } catch {
+      return NextResponse.json(
+        { error: "Invalid or expired token" },
+        { status: 400 }
+      );
+    }
+
+    if (!email) {
+      return NextResponse.json(
+        { error: "Email not found in token" },
+        { status: 400 }
+      );
+    }
+
+    // Hash the password before saving
     const hashedPassword = await hash(password, 12);
 
     const user = await prisma.user.update({
@@ -32,7 +54,7 @@ export async function POST(req: Request) {
       select: { id: true, email: true },
     });
 
-    return NextResponse.json({ ok: true, userId: user.id });
+    return NextResponse.json({ ok: true, email: user.email });
   } catch (err) {
     console.error("Set password error:", err);
     return NextResponse.json(

@@ -1,17 +1,17 @@
-// lib/auth.ts
-import NextAuth, { type NextAuthOptions } from "next-auth";
+// C:\JetSetNew6\lib\auth.ts
+import NextAuth, { type NextAuthOptions, type User as NextAuthUser } from "next-auth";
 import GoogleProvider from "next-auth/providers/google";
 import EmailProvider from "next-auth/providers/email";
 import CredentialsProvider from "next-auth/providers/credentials";
 import { PrismaAdapter } from "@auth/prisma-adapter";
 import { prisma } from "@/lib/prisma";
-import { compare } from "bcryptjs";
+import bcrypt from "bcryptjs";
 
 const isProd = !!process.env.VERCEL;
 const DEFAULT_BASE = isProd ? "https://jetsetdirect.com" : "http://localhost:3000";
 export const BASE_URL = (process.env.NEXTAUTH_URL || DEFAULT_BASE).trim();
 
-// --- Mailgun helper (no extra deps) ---
+// --- Mailgun helper (uses API, no extra deps) ---
 async function sendWithMailgun(to: string, subject: string, text: string, html: string) {
   const apiKey = process.env.MAILGUN_API_KEY!;
   const domain = process.env.MAILGUN_DOMAIN!;
@@ -42,10 +42,8 @@ async function sendWithMailgun(to: string, subject: string, text: string, html: 
 export const authOptions: NextAuthOptions = {
   adapter: PrismaAdapter(prisma) as any,
 
-  // Persist sessions to Prisma (Session table)
   session: { strategy: "database" },
 
-  // Providers
   providers: [
     GoogleProvider({
       clientId: process.env.GOOGLE_CLIENT_ID!,
@@ -53,7 +51,6 @@ export const authOptions: NextAuthOptions = {
       allowDangerousEmailAccountLinking: true,
     }),
 
-    // Email magic-link via Mailgun
     EmailProvider({
       from: process.env.EMAIL_FROM,
       async sendVerificationRequest({ identifier, url }) {
@@ -69,20 +66,49 @@ export const authOptions: NextAuthOptions = {
       },
     }),
 
-    // Optional username/password for admins or test users
     CredentialsProvider({
+      id: "credentials",
       name: "Credentials",
       credentials: {
         email: { label: "Email", type: "email" },
         password: { label: "Password", type: "password" },
       },
       async authorize(creds) {
-        if (!creds?.email || !creds.password) return null;
-        const user = await prisma.user.findUnique({ where: { email: creds.email } });
-        if (!user?.password) return null;
-        const ok = await compare(creds.password, user.password);
-        if (!ok) return null;
-        return { id: user.id, name: user.name, email: user.email, image: user.image };
+        const email = (creds?.email || "").trim().toLowerCase();
+        const password = creds?.password || "";
+        if (!email || !password) return null;
+
+        const user = await prisma.user.findUnique({
+          where: { email },
+          select: {
+            id: true,
+            email: true,
+            name: true,
+            image: true,
+            role: true,
+            password: true,        // legacy
+            passwordHash: true,    // new field
+          },
+        });
+        if (!user) return null;
+
+        // Prefer passwordHash (bcrypt)
+        if (user.passwordHash) {
+          const ok = await bcrypt.compare(password, user.passwordHash);
+          if (!ok) return null;
+        } else if (user.password) {
+          // Legacy fallback: direct equality check
+          if (user.password !== password) return null;
+        } else {
+          return null;
+        }
+
+        return {
+          id: user.id,
+          email: user.email!,
+          name: user.name ?? undefined,
+          image: user.image ?? undefined,
+        } as NextAuthUser;
       },
     }),
   ],
@@ -92,7 +118,6 @@ export const authOptions: NextAuthOptions = {
   },
 
   callbacks: {
-    // Keep redirects inside our own origin
     async redirect({ url }) {
       try {
         const base = new URL(BASE_URL);
@@ -102,16 +127,16 @@ export const authOptions: NextAuthOptions = {
         return BASE_URL;
       }
     },
-
-    // With database sessions, NextAuth passes `user`
     async session({ session, user }) {
-      if (user?.id) (session.user as any).id = user.id;
+      if (session.user) {
+        (session.user as any).id = user.id;
+        (session.user as any).role = (user as any).role ?? "USER";
+      }
       return session;
     },
   },
 };
 
-// Export handler for route reuse
 const handler = NextAuth(authOptions);
 export { handler as GET, handler as POST };
 export default handler;

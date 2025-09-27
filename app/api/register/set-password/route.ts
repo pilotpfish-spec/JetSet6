@@ -8,8 +8,6 @@ export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
 function validatePassword(pw: string) {
-  // Keep it simple for now; tighten later if you want.
-  // At least 8 chars and not all whitespace.
   return typeof pw === "string" && pw.trim().length >= 8;
 }
 
@@ -31,20 +29,17 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: "Invalid token." }, { status: 400 });
     }
 
-    // Ensure user exists
     const existing = await prisma.user.findUnique({ where: { email } });
     if (!existing) {
       return NextResponse.json({ error: "User not found." }, { status: 404 });
     }
 
-    // Hash and persist to the new column; clear the legacy `password` field.
+    // ✅ Hash into `password` (the field CredentialsProvider checks)
     const hash = await bcrypt.hash(String(password), 12);
     const user = await prisma.user.update({
       where: { email },
       data: {
-        passwordHash: hash,
-        password: null,           // legacy field cleared for consistency
-        // If they somehow reached here w/o verification, mark it verified now.
+        password: hash, // <-- store bcrypt hash here
         emailVerified: existing.emailVerified ?? new Date(),
       },
       select: { id: true, email: true, name: true },

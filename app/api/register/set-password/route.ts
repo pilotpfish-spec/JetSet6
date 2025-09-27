@@ -2,13 +2,12 @@ import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { hash } from "bcryptjs";
 import jwt from "jsonwebtoken";
+import { signIn } from "next-auth/react";
 
 const TOKEN_SECRET = process.env.NEXTAUTH_SECRET || "changeme";
 
 export async function POST(req: Request) {
   try {
-    console.log("=== DEBUG: Running NEW token-based set-password route ===");
-
     const { token, password } = await req.json();
 
     if (!token || !password) {
@@ -55,7 +54,15 @@ export async function POST(req: Request) {
       select: { id: true, email: true },
     });
 
-    return NextResponse.json({ ok: true, email: user.email });
+    // Attempt to sign them in immediately
+    await signIn("credentials", {
+      redirect: false,
+      email: user.email,
+      password,
+    });
+
+    // Redirect user straight to account page
+    return NextResponse.redirect(new URL("/account", req.url));
   } catch (err) {
     console.error("Set password error:", err);
     return NextResponse.json(

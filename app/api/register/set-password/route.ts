@@ -1,4 +1,3 @@
-// C:\JetSetNew6\app\api\register\set-password\route.ts
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { verifyJWT } from "@/lib/tokens";
@@ -29,17 +28,19 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: "Invalid token." }, { status: 400 });
     }
 
+    // Ensure user exists
     const existing = await prisma.user.findUnique({ where: { email } });
     if (!existing) {
       return NextResponse.json({ error: "User not found." }, { status: 404 });
     }
 
-    // ✅ Hash into `password` (the field CredentialsProvider checks)
+    // Hash and persist to the correct "password" column
     const hash = await bcrypt.hash(String(password), 12);
     const user = await prisma.user.update({
       where: { email },
       data: {
-        password: hash, // <-- store bcrypt hash here
+        password: hash,              // ✅ store in password
+        passwordHash: null,          // clear out legacy field
         emailVerified: existing.emailVerified ?? new Date(),
       },
       select: { id: true, email: true, name: true },
@@ -54,3 +55,4 @@ export async function POST(req: Request) {
     );
   }
 }
+

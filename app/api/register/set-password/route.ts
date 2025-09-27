@@ -1,3 +1,4 @@
+// C:\JetSetNew6\app\api\register\set-password\route.ts
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { verifyJWT } from "@/lib/tokens";
@@ -7,6 +8,7 @@ export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
 function validatePassword(pw: string) {
+  // At least 8 chars and not all whitespace
   return typeof pw === "string" && pw.trim().length >= 8;
 }
 
@@ -21,23 +23,26 @@ export async function POST(req: Request) {
       );
     }
 
+    // pt = short-lived JWT produced by /api/register/confirm
     const payload = await verifyJWT<{ email?: string }>(pt);
     const email = (payload?.email || "").trim().toLowerCase();
     if (!email) {
       return NextResponse.json({ error: "Invalid token." }, { status: 400 });
     }
 
+    // Ensure user exists
     const existing = await prisma.user.findUnique({ where: { email } });
     if (!existing) {
       return NextResponse.json({ error: "User not found." }, { status: 404 });
     }
 
+    // Hash and persist directly into the `password` column
     const hash = await bcrypt.hash(String(password), 12);
     const user = await prisma.user.update({
       where: { email },
       data: {
-        password: hash,        // ✅ keep only this column
-        passwordHash: null,    // ✅ clear out the legacy column
+        password: hash,
+        // If they somehow reached here without verification, mark it verified
         emailVerified: existing.emailVerified ?? new Date(),
       },
       select: { id: true, email: true, name: true },
@@ -52,4 +57,3 @@ export async function POST(req: Request) {
     );
   }
 }
-

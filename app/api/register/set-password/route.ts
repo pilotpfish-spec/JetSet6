@@ -2,7 +2,6 @@ import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { hash } from "bcryptjs";
 import jwt from "jsonwebtoken";
-import { signIn } from "next-auth/react";
 
 const TOKEN_SECRET = process.env.NEXTAUTH_SECRET || "changeme";
 
@@ -45,23 +44,15 @@ export async function POST(req: Request) {
 
     const hashedPassword = await hash(password, 12);
 
-    const user = await prisma.user.update({
+    await prisma.user.update({
       where: { email },
       data: {
         password: hashedPassword,
         emailVerified: new Date(),
       },
-      select: { id: true, email: true },
     });
 
-    // Attempt to sign them in immediately
-    await signIn("credentials", {
-      redirect: false,
-      email: user.email,
-      password,
-    });
-
-    // Redirect user straight to account page
+    // ✅ redirect to /account on success
     return NextResponse.redirect(new URL("/account", req.url));
   } catch (err) {
     console.error("Set password error:", err);
@@ -71,3 +62,4 @@ export async function POST(req: Request) {
     );
   }
 }
+

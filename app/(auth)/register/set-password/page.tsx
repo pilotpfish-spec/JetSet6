@@ -1,23 +1,18 @@
 "use client";
 
 import { useState } from "react";
-import { useRouter } from "next/navigation";
-import { signIn } from "next-auth/react";
+import { useSearchParams } from "next/navigation";
 
 export default function SetPasswordPage() {
+  const searchParams = useSearchParams();
+  const token = searchParams.get("pt"); // token passed as ?pt=
+
   const [password, setPassword] = useState("");
-  const [status, setStatus] = useState<string | null>(null);
-  const router = useRouter();
+  const [error, setError] = useState("");
 
-  async function handleSubmit(e: React.FormEvent) {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    setStatus(null);
-
-    const token = new URLSearchParams(window.location.search).get("pt");
-    if (!token) {
-      setStatus("Missing token.");
-      return;
-    }
+    setError("");
 
     try {
       const res = await fetch("/api/register/set-password", {
@@ -26,54 +21,43 @@ export default function SetPasswordPage() {
         body: JSON.stringify({ token, password }),
       });
 
-      const data = await res.json();
-      if (!res.ok) {
-        setStatus(data.error || "Failed to set password.");
+      if (res.redirected) {
+        // ✅ follow server redirect to /account
+        window.location.href = res.url;
         return;
       }
 
-      // ✅ Success — automatically sign in with the new password
-      setStatus("Password set successfully. Signing you in...");
-      setPassword("");
-
-      const loginRes = await signIn("credentials", {
-        redirect: false,
-        email: data.email,
-        password,
-        callbackUrl: "/account",
-      });
-
-      if (loginRes?.error) {
-        setStatus("Password saved, but login failed. Please sign in manually.");
-        setTimeout(() => router.push("/login"), 1500);
-      } else {
-        router.push("/account");
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}));
+        throw new Error(data.error || "Failed to set password");
       }
-    } catch (err) {
-      console.error("Error setting password:", err);
-      setStatus("Unexpected error.");
+    } catch (err: any) {
+      setError(err.message);
     }
-  }
+  };
 
   return (
-    <div className="max-w-md mx-auto mt-12 p-6 bg-white shadow rounded">
-      <h1 className="text-xl font-bold mb-4">Set Your Password</h1>
-      <form onSubmit={handleSubmit} className="space-y-4">
+    <div className="flex justify-center items-center h-screen bg-gray-50">
+      <form
+        onSubmit={handleSubmit}
+        className="bg-white shadow-md rounded px-8 pt-6 pb-8 mb-4 w-96"
+      >
+        <h2 className="text-xl font-bold mb-4">Set Your Password</h2>
         <input
           type="password"
           placeholder="New password"
           value={password}
           onChange={(e) => setPassword(e.target.value)}
-          className="w-full border px-3 py-2 rounded"
+          className="border rounded w-full py-2 px-3 mb-4"
         />
         <button
           type="submit"
-          className="w-full bg-blue-600 text-white py-2 rounded hover:bg-blue-700"
+          className="w-full bg-blue-600 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded"
         >
           Save Password
         </button>
+        {error && <p className="text-red-600 text-sm mt-2">{error}</p>}
       </form>
-      {status && <p className="mt-4 text-center text-sm">{status}</p>}
     </div>
   );
 }

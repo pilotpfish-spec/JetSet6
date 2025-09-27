@@ -1,10 +1,13 @@
+// C:\JetSetNew6\app\(auth)\register\set-password\page.tsx
 "use client";
 
 import { useState } from "react";
+import { useRouter } from "next/navigation";
 
 export default function SetPasswordPage() {
   const [password, setPassword] = useState("");
   const [status, setStatus] = useState<string | null>(null);
+  const router = useRouter();
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -29,8 +32,12 @@ export default function SetPasswordPage() {
         return;
       }
 
-      setStatus("Password set successfully. You can now sign in.");
+      // ✅ Success — redirect straight to account
+      setStatus("Password set successfully. Redirecting...");
       setPassword("");
+      setTimeout(() => {
+        router.push("/account");
+      }, 1500);
     } catch (err) {
       console.error("Error setting password:", err);
       setStatus("Unexpected error.");

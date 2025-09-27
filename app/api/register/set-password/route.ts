@@ -21,26 +21,23 @@ export async function POST(req: Request) {
       );
     }
 
-    // pt = short-lived JWT produced by /api/register/confirm
     const payload = await verifyJWT<{ email?: string }>(pt);
     const email = (payload?.email || "").trim().toLowerCase();
     if (!email) {
       return NextResponse.json({ error: "Invalid token." }, { status: 400 });
     }
 
-    // Ensure user exists
     const existing = await prisma.user.findUnique({ where: { email } });
     if (!existing) {
       return NextResponse.json({ error: "User not found." }, { status: 404 });
     }
 
-    // Hash and persist to the correct "password" column
     const hash = await bcrypt.hash(String(password), 12);
     const user = await prisma.user.update({
       where: { email },
       data: {
-        password: hash,              // ✅ store in password
-        passwordHash: null,          // clear out legacy field
+        password: hash,        // ✅ keep only this column
+        passwordHash: null,    // ✅ clear out the legacy column
         emailVerified: existing.emailVerified ?? new Date(),
       },
       select: { id: true, email: true, name: true },

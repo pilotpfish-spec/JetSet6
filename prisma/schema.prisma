@@ -23,8 +23,7 @@ model User {
   stripeCurrentPeriodEnd DateTime?
   role                   UserRole  @default(USER)
   password               String?
-  passwordHash           String?
-
+  
   // Relations
   accounts               Account[]
   bookings               Booking[]

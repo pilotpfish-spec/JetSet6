@@ -1,65 +1,55 @@
+import { headers } from "next/headers";
 import { NextResponse } from "next/server";
 import Stripe from "stripe";
 import { prisma } from "@/lib/prisma";
 
 const stripe = new Stripe(process.env.STRIPE_SECRET_KEY!, {
-  apiVersion: "2025-01-27.acacia", // Adjust to the latest supported
+  apiVersion: "2023-10-16",
 });
 
-export const runtime = "nodejs";
-export const dynamic = "force-dynamic";
+export const dynamic = "force-dynamic"; // always revalidate
+export const runtime = "nodejs";        // ensure Node runtime
 
 export async function POST(req: Request) {
-  const sig = req.headers.get("stripe-signature");
-  if (!sig) {
-    return NextResponse.json({ error: "Missing Stripe signature" }, { status: 400 });
+  const sig = headers().get("stripe-signature");
+
+  let rawBody: string;
+  try {
+    rawBody = await req.text(); // IMPORTANT: raw body required for signature verification
+  } catch (err) {
+    console.error("❌ Failed to read raw body:", err);
+    return NextResponse.json({ error: "Failed to read body" }, { status: 400 });
   }
 
   let event: Stripe.Event;
-
   try {
-    // ✅ Use raw body, not req.json()
-    const rawBody = Buffer.from(await req.arrayBuffer());
     event = stripe.webhooks.constructEvent(
       rawBody,
-      sig,
+      sig!,
       process.env.STRIPE_WEBHOOK_SECRET!
     );
+    console.log("✅ Webhook verified:", event.type);
   } catch (err: any) {
-    console.error("Webhook signature error:", err.message);
-    return NextResponse.json(
-      { error: `Webhook Error: ${err.message}` },
-      { status: 400 }
-    );
+    console.error("❌ Webhook signature verification failed:", err.message);
+    return NextResponse.json({ error: err.message }, { status: 400 });
   }
 
   try {
-    switch (event.type) {
-      case "checkout.session.completed": {
-        const session = event.data.object as Stripe.Checkout.Session;
+    if (event.type === "checkout.session.completed") {
+      const session = event.data.object as Stripe.Checkout.Session;
 
-        if (!session.customer_email) break;
-
-        // Mark booking as paid
-        await prisma.booking.updateMany({
-          where: { id: session.metadata?.bookingId },
+      if (session.client_reference_id) {
+        await prisma.booking.update({
+          where: { id: session.client_reference_id },
           data: { status: "PAID" },
         });
-
-        console.log("✅ Checkout completed for:", session.customer_email);
-        break;
+        console.log("✅ Booking marked as PAID:", session.client_reference_id);
       }
-
-      default:
-        console.log(`Unhandled event type ${event.type}`);
     }
-  } catch (err) {
-    console.error("Webhook handler error:", err);
-    return NextResponse.json(
-      { error: "Failed to process event" },
-      { status: 500 }
-    );
-  }
 
-  return NextResponse.json({ received: true }, { status: 200 });
+    return NextResponse.json({ received: true });
+  } catch (err) {
+    console.error("❌ Error handling webhook:", err);
+    return NextResponse.json({ error: "Webhook handling failed" }, { status: 500 });
+  }
 }

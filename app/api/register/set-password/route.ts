@@ -42,7 +42,6 @@ export async function POST(req: Request) {
       );
     }
 
-    // Hash the password before saving
     const hashedPassword = await hash(password, 12);
 
     const user = await prisma.user.update({

@@ -44,16 +44,17 @@ export async function POST(req: Request) {
 
     const hashedPassword = await hash(password, 12);
 
-    await prisma.user.update({
+    const user = await prisma.user.update({
       where: { email },
       data: {
         password: hashedPassword,
         emailVerified: new Date(),
       },
+      select: { id: true, email: true },
     });
 
-    // ✅ redirect to /account on success
-    return NextResponse.redirect(new URL("/account", req.url));
+    // ✅ Do NOT redirect here. Let the client call signIn() so a session cookie is created.
+    return NextResponse.json({ success: true, email: user.email }, { status: 200 });
   } catch (err) {
     console.error("Set password error:", err);
     return NextResponse.json(

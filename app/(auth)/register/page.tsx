@@ -1,3 +1,4 @@
+// C:\JetSetNew6\app\(auth)\register\page.tsx
 "use client";
 
 import { useState } from "react";
@@ -5,38 +6,27 @@ import Link from "next/link";
 import { signIn } from "next-auth/react";
 
 export default function RegisterPage() {
-  const [form, setForm] = useState({ email: "", password: "" });
+  const [email, setEmail] = useState("");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
-
-  const onChange =
-    (key: keyof typeof form) =>
-    (e: React.ChangeEvent<HTMLInputElement>) => {
-      setForm((f) => ({ ...f, [key]: e.target.value }));
-    };
+  const [msg, setMsg] = useState<string | null>(null);
 
   async function onSubmit(e: React.FormEvent) {
     e.preventDefault();
     setError(null);
+    setMsg(null);
     setLoading(true);
     try {
-      // TODO: wire up your register API endpoint
-      const res = await fetch("/api/auth/register", {
+      const res = await fetch("/api/register/start", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(form),
+        body: JSON.stringify({ email }),
       });
-      if (!res.ok) throw new Error("Failed to register");
-
-      // Optionally sign them in immediately
-      await signIn("credentials", {
-        redirect: true,
-        email: form.email,
-        password: form.password,
-        callbackUrl: "/account",
-      });
-    } catch {
-      setError("Could not create account.");
+      const data = await res.json();
+      if (!res.ok) throw new Error(data?.error || "Failed to send link");
+      setMsg("Check your email for a confirmation link.");
+    } catch (e: any) {
+      setError(e.message || "Could not start registration.");
     } finally {
       setLoading(false);
     }
@@ -50,23 +40,16 @@ export default function RegisterPage() {
           <h1 className="text-2xl font-bold">Sign up</h1>
         </div>
 
+        {msg && <div className="text-center text-green-600">{msg}</div>}
         {error && <div className="text-center text-red-500">{error}</div>}
 
         <form onSubmit={onSubmit} className="space-y-4">
           <input
             type="email"
             required
-            value={form.email}
-            onChange={onChange("email")}
+            value={email}
+            onChange={(e) => setEmail(e.target.value)}
             placeholder="Email"
-            className="w-full rounded border px-3 py-2"
-          />
-          <input
-            type="password"
-            required
-            value={form.password}
-            onChange={onChange("password")}
-            placeholder="Password"
             className="w-full rounded border px-3 py-2"
           />
           <button
@@ -74,7 +57,7 @@ export default function RegisterPage() {
             disabled={loading}
             className="w-full rounded bg-gradient-to-r from-sky-500 to-pink-500 py-2 font-semibold text-white"
           >
-            {loading ? "Creating..." : "Create Account"}
+            {loading ? "Sending…" : "Email me a link"}
           </button>
         </form>
 

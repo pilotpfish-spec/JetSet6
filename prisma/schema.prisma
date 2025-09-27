@@ -1,3 +1,4 @@
+// C:\JetSetNew6\prisma\schema.prisma
 generator client {
   provider = "prisma-client-js"
 }
@@ -22,7 +23,12 @@ model User {
   stripePriceId          String?
   stripeCurrentPeriodEnd DateTime?
   role                   UserRole  @default(USER)
+
+  // Legacy (kept for compatibility; not used by new flow)
   password               String?
+
+  // New for credentials flow (used by /register/set-password)
+  passwordHash           String?   @db.Text
 
   // Relations
   accounts               Account[]
@@ -98,6 +104,15 @@ model Address {
   user       User     @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@index([userId])
+}
+
+// For email verification links (Auth.js / Prisma Adapter compatible)
+model VerificationToken {
+  identifier String
+  token      String   @unique
+  expires    DateTime
+
+  @@unique([identifier, token])
 }
 
 // ===========================

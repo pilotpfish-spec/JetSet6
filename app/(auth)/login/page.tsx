@@ -3,8 +3,12 @@
 import Image from "next/image";
 import Link from "next/link";
 import { signIn } from "next-auth/react";
+import { useState } from "react";
+import { EyeIcon, EyeSlashIcon } from "@heroicons/react/24/outline";
 
 export default function LoginPage() {
+  const [showPassword, setShowPassword] = useState(false);
+
   return (
     <div className="flex min-h-screen items-center justify-center bg-gray-50">
       <div className="w-full max-w-md rounded-xl bg-white p-8 shadow-lg">
@@ -53,13 +57,36 @@ export default function LoginPage() {
             >
               Password
             </label>
-            <input
-              id="password"
-              name="password"
-              type="password"
-              required
-              className="mt-1 block w-full rounded-md border border-gray-300 px-3 py-2 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm"
-            />
+            <div className="relative">
+              <input
+                id="password"
+                name="password"
+                type={showPassword ? "text" : "password"}
+                required
+                className="mt-1 block w-full rounded-md border border-gray-300 px-3 py-2 pr-10 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm"
+              />
+              <button
+                type="button"
+                onClick={() => setShowPassword((prev) => !prev)}
+                className="absolute inset-y-0 right-2 flex items-center"
+              >
+                {showPassword ? (
+                  <EyeSlashIcon className="h-5 w-5 text-gray-500" />
+                ) : (
+                  <EyeIcon className="h-5 w-5 text-gray-500" />
+                )}
+              </button>
+            </div>
+          </div>
+
+          {/* Forgot password */}
+          <div className="flex justify-end">
+            <Link
+              href="/forgot-password"
+              className="text-sm text-indigo-600 hover:underline"
+            >
+              Forgot password?
+            </Link>
           </div>
 
           <button
@@ -115,7 +142,6 @@ export default function LoginPage() {
           </Link>
         </p>
 
-        {/* Footer */}
         <p className="mt-4 text-center text-xs text-gray-400">
           You’ll be returned to your account after signing in.
         </p>
@@ -123,4 +149,5 @@ export default function LoginPage() {
     </div>
   );
 }
+
 

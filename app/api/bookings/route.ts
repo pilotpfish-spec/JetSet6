@@ -27,6 +27,49 @@ export async function GET(req: Request) {
   return NextResponse.json(bookings);
 }
 
+// POST /api/bookings → create new booking
+export async function POST(req: Request) {
+  const session = await getServerSession(authOptions);
+  if (!session?.user?.email) {
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
+
+  const user = await prisma.user.findUnique({ where: { email: session.user.email } });
+  if (!user) {
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
+
+  const body = await req.json().catch(() => ({}));
+  const {
+    pickupAddress,
+    dropoffAddress,
+    airport,
+    terminal,
+    scheduledAt,
+    priceCents,
+  } = body;
+
+  if (!pickupAddress || !scheduledAt || !priceCents) {
+    return NextResponse.json({ error: "Missing required fields" }, { status: 400 });
+  }
+
+  const booking = await prisma.booking.create({
+    data: {
+      userId: user.id,
+      pickupAddress,
+      dropoffAddress,
+      airport,
+      terminal,
+      scheduledAt: new Date(scheduledAt),
+      priceCents,
+      totalCents: priceCents,
+      status: "UNPAID",
+    },
+  });
+
+  return NextResponse.json(booking, { status: 201 });
+}
+
 // PUT /api/bookings → update a booking
 export async function PUT(req: Request) {
   const session = await getServerSession(authOptions);

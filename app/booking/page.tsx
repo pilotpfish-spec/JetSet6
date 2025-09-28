@@ -18,7 +18,10 @@ type AirportCode = "DFW" | "DAL";
 const JETSET_NAVY = "#0a1a2f";
 const JETSET_YELLOW = "#FFD700";
 
-// ✅ Coordinates for airports and terminals
+/**
+ * ✅ Coordinates for airports and terminals
+ * These are used to build Google Distance Matrix origin/destination points.
+ */
 const TERMINALS: Record<string, { name: string; lat: number; lng: number }> = {
   "DFW-A": { name: "DFW Terminal A", lat: 32.8998, lng: -97.0403 },
   "DFW-B": { name: "DFW Terminal B", lat: 32.899, lng: -97.0526 },
@@ -29,7 +32,10 @@ const TERMINALS: Record<string, { name: string; lat: number; lng: number }> = {
   DAL: { name: "Dallas Love Field", lat: 32.8471, lng: -96.8517 },
 };
 
-// --- tiny fare helper so we always have a number to send to Stripe ---
+/**
+ * --- tiny fare helper so we always have a number to send to Stripe ---
+ * Base $45 for up to 20 miles, then $1.50 per extra mile.
+ */
 function calcFareCents(miles: number): number {
   const base = 45; // USD
   const extraMiles = Math.max(0, miles - 20);
@@ -38,6 +44,28 @@ function calcFareCents(miles: number): number {
   return Math.round(total * 100);
 }
 
+/** Small util: join date+time to an ISO string the API expects */
+function toScheduledIso(dateStr: string, timeStr: string): string {
+  // If either part is missing, return empty string (validation catches it)
+  if (!dateStr || !timeStr) return "";
+  // Build local datetime to keep user’s local choice, then serialize to ISO
+  const d = new Date(`${dateStr}T${timeStr}:00`);
+  return d.toISOString();
+}
+
+/** Defensive parse for sessionStorage numbers */
+function readCentsFromStorage(key: string, fallback: number): number {
+  try {
+    const raw = sessionStorage.getItem(key);
+    if (!raw) return fallback;
+    const n = Number(raw);
+    return Number.isFinite(n) && n > 0 ? Math.floor(n) : fallback;
+  } catch {
+    return fallback;
+  }
+}
+
+/** Address autocomplete component (unchanged) */
 function AddressAutocomplete(props: {
   id: string;
   label: string;
@@ -134,6 +162,9 @@ export default function BookingPage() {
   const [error, setError] = useState<string | null>(null);
   const [quoteReady, setQuoteReady] = useState<boolean>(false);
 
+  // UI state for action progress (non-blocking, purely visual)
+  const [creatingBooking, setCreatingBooking] = useState<boolean>(false);
+
   useEffect(() => {
     window.initJetSetPlaces = () => {
       if (window.google?.maps?.places) {
@@ -151,6 +182,7 @@ export default function BookingPage() {
     }
   };
 
+  /** Validate inputs necessary to compute a quote and create a booking */
   const validateForQuote = (): string | null => {
     if (!rideDate || !rideTime) return "Please select date and time.";
     if (tripType === "to") {
@@ -164,7 +196,7 @@ export default function BookingPage() {
     return null;
   };
 
-  // Build origin/destination based on tripType
+  /** Build origin/destination for Google Distance Matrix */
   const getOD = () => {
     let origin: any;
     let destination: any;
@@ -182,7 +214,7 @@ export default function BookingPage() {
     return { origin, destination };
   };
 
-  // Compute miles & minutes (used for quote + fallback fare for Stripe)
+  /** Compute miles & minutes (used for quote and fallback fare) */
   async function computeTripStats(): Promise<{ miles: number; minutes: number } | null> {
     if (!window.google?.maps?.DistanceMatrixService) return null;
 
@@ -222,6 +254,7 @@ export default function BookingPage() {
     });
   }
 
+  /** Handle "Get Quote" button (unchanged) */
   const handleQuote = async () => {
     const problem = validateForQuote();
     if (problem) {
@@ -257,18 +290,71 @@ export default function BookingPage() {
     router.push(`/quote?${params.toString()}`);
   };
 
-  // --- Stripe call + redirect (Confirm Booking) ---
+  /**
+   * Create a booking record so Account page can load it.
+   * Returns the created booking's id (string).
+   */
+  async function createBookingOrThrow(priceCents: number): Promise<string> {
+    const scheduledAtIso = toScheduledIso(rideDate, rideTime);
+    if (!scheduledAtIso) throw new Error("Missing date/time.");
+
+    const payload = {
+      pickupAddress:
+        tripType === "from" ? (TERMINALS[terminal]?.name || `${airport} Terminal`) : (pickup?.formatted || ""),
+      dropoffAddress:
+        tripType === "to" ? (TERMINALS[terminal]?.name || `${airport} Terminal`) : (dropoff?.formatted || ""),
+      airport,
+      terminal,
+      scheduledAt: scheduledAtIso,
+      priceCents,
+    };
+
+    const res = await fetch("/api/bookings", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify(payload),
+    });
+
+    if (!res.ok) {
+      let msg = "Failed to create booking.";
+      try {
+        const j = await res.json();
+        if (j?.error) msg = j.error;
+      } catch {}
+      throw new Error(msg);
+    }
+
+    const booking = await res.json();
+    if (!booking?.id) throw new Error("Booking created but no id returned.");
+    try {
+      sessionStorage.setItem("JETSET_BOOKING_ID", String(booking.id));
+      sessionStorage.setItem("JETSET_BOOKING_PRICE", String(priceCents));
+    } catch {}
+    return String(booking.id);
+  }
+
+  /**
+   * --- Stripe call + redirect (Confirm Booking) ---
+   * Now performs:
+   *  1) Auth gate (sign in if needed)
+   *  2) Compute / read priceCents
+   *  3) Create booking via /api/bookings (UNPAID) → get bookingId
+   *  4) Start Stripe Checkout with bookingId and metadata
+   *  5) Redirect to Stripe hosted checkout
+   */
   async function handleBookNow() {
     if (!session) {
       signIn();
       return;
     }
 
+    setCreatingBooking(true);
+
     let unitAmount = 4500; // default to $45
     try {
-      const stored = sessionStorage.getItem("JETSET_QUOTE_TOTAL_CENTS");
-      if (stored && !Number.isNaN(Number(stored))) {
-        unitAmount = Number(stored);
+      const stored = readCentsFromStorage("JETSET_QUOTE_TOTAL_CENTS", 4500);
+      if (stored && Number.isFinite(stored) && stored >= 100) {
+        unitAmount = stored;
       } else {
         const stats = await computeTripStats();
         if (stats) unitAmount = calcFareCents(stats.miles);
@@ -278,31 +364,68 @@ export default function BookingPage() {
       if (stats) unitAmount = calcFareCents(stats.miles);
     }
 
-    const payload = {
-      unitAmount,
-      bookingId: "temp-id-123",
-      email: session?.user?.email ?? undefined,
-    };
+    try {
+      // 1) Create booking so Account can show it immediately (status: UNPAID)
+      const bookingId = await createBookingOrThrow(unitAmount);
 
-    const res = await fetch("/api/stripe/checkout", {
-      method: "POST",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify(payload),
-    });
+      // 2) Prepare trip metadata for Stripe reconciliation and webhooks
+      const scheduledAtLocal = `${rideDate}T${rideTime}:00`;
+      const meta = {
+        distance: "", // The quote page passes accurate distance; booking page may not have it yet
+        minutes: "",
+        from:
+          tripType === "from"
+            ? (TERMINALS[terminal]?.name || `${airport} Terminal`)
+            : (pickup?.formatted || ""),
+        to:
+          tripType === "to"
+            ? (TERMINALS[terminal]?.name || `${airport} Terminal`)
+            : (dropoff?.formatted || ""),
+        airport,
+        terminal,
+        dateIso: scheduledAtLocal,
+      };
 
-    if (!res.ok) {
-      alert("Could not start checkout.");
-      return;
-    }
+      // 3) Start checkout
+      const payload = {
+        unitAmount,
+        bookingId,
+        email: session?.user?.email ?? undefined,
+        metadata: meta,
+        // On success, your site can pick up the booking via Account page
+        successPath: "/account?paid=1",
+        cancelPath: "/account?canceled=1", // bring them to account to manage
+      };
 
-    const data = await res.json();
-    if (data?.url) {
-      window.location.href = data.url;
-    } else {
-      alert("Checkout URL missing.");
+      const res = await fetch("/api/stripe/checkout", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify(payload),
+      });
+
+      if (!res.ok) {
+        let msg = "Could not start checkout.";
+        try {
+          const j = await res.json();
+          if (j?.error) msg = j.error;
+        } catch {}
+        throw new Error(msg);
+      }
+
+      const data = await res.json();
+      if (data?.url) {
+        window.location.href = data.url;
+      } else {
+        throw new Error("Checkout URL missing.");
+      }
+    } catch (err: any) {
+      alert(err?.message || "Booking failed.");
+    } finally {
+      setCreatingBooking(false);
     }
   }
 
+  /** Airport select block (unchanged) */
   const AirportFields = () => (
     <>
       <div className="mb-4">
@@ -454,7 +577,11 @@ export default function BookingPage() {
             </>
           )}
 
-          {error && <p className="text-sm mt-2" style={{ color: "#b91c1c" }}>{error}</p>}
+          {error && (
+            <p className="text-sm mt-2" style={{ color: "#b91c1c" }}>
+              {error}
+            </p>
+          )}
 
           <div className="mt-6 flex items-center gap-4">
             <button
@@ -470,8 +597,10 @@ export default function BookingPage() {
                 onClick={handleBookNow}
                 className="px-6 py-2 rounded font-semibold"
                 style={{ backgroundColor: JETSET_NAVY, color: "#fff" }}
+                disabled={creatingBooking}
+                title={creatingBooking ? "Creating booking..." : "Confirm Booking"}
               >
-                Confirm Booking
+                {creatingBooking ? "Creating..." : "Confirm Booking"}
               </button>
             )}
           </div>

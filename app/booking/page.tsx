@@ -306,8 +306,8 @@ export default function BookingPage() {
     return String(booking.id);
   }
 
-  // --- Stripe: Pay Now (Checkout) ---
-  async function handlePayNow() {
+  // --- Stripe call + redirect (Confirm Booking) ---
+  async function handleBookNow() {
     if (!session) {
       signIn();
       return;
@@ -331,26 +331,34 @@ export default function BookingPage() {
       // 1) Create booking first so Account can show it
       const bookingId = await createBookingOrThrow(unitAmount);
 
-      // 2) Trip context for Stripe reconciliation
+      // 2) Metadata for Stripe/webhooks
       const meta = {
-        distance: "",
+        distance: "", // quote page provides accurate values; booking page may not
         minutes: "",
-        from: tripType === "from" ? (TERMINALS[terminal]?.name || `${airport} Terminal`) : (pickup?.formatted || ""),
-        to:   tripType === "to"   ? (TERMINALS[terminal]?.name || `${airport} Terminal`) : (dropoff?.formatted || ""),
+        from: tripType === "from"
+          ? (TERMINALS[terminal]?.name || `${airport} Terminal`)
+          : (pickup?.formatted || ""),
+        to: tripType === "to"
+          ? (TERMINALS[terminal]?.name || `${airport} Terminal`)
+          : (dropoff?.formatted || ""),
         airport,
         terminal,
         dateIso: `${rideDate}T${rideTime}:00`,
       };
 
+      const payload = {
+        unitAmount,
+        bookingId,
+        email: session?.user?.email ?? undefined,
+        metadata: meta,
+        successPath: "/account?paid=1",
+        cancelPath: "/account?canceled=1",
+      };
+
       const res = await fetch("/api/stripe/checkout", {
         method: "POST",
         headers: { "content-type": "application/json" },
-        body: JSON.stringify({
-          unitAmount,
-          bookingId,
-          email: session?.user?.email ?? undefined,
-          metadata: meta,
-        }),
+        body: JSON.stringify(payload),
       });
 
       if (!res.ok) {
@@ -367,74 +375,6 @@ export default function BookingPage() {
         window.location.href = data.url;
       } else {
         throw new Error("Checkout URL missing.");
-      }
-    } catch (err: any) {
-      alert(err?.message || "Booking failed.");
-    }
-  }
-
-  // --- Stripe: Pay Later (Invoice) ---
-  async function handlePayLater() {
-    if (!session) {
-      signIn();
-      return;
-    }
-
-    let unitAmount = 4500;
-    try {
-      const stored = sessionStorage.getItem("JETSET_QUOTE_TOTAL_CENTS");
-      if (stored && !Number.isNaN(Number(stored))) {
-        unitAmount = Number(stored);
-      } else {
-        const stats = await computeTripStats();
-        if (stats) unitAmount = calcFareCents(stats.miles);
-      }
-    } catch {
-      const stats = await computeTripStats();
-      if (stats) unitAmount = calcFareCents(stats.miles);
-    }
-
-    try {
-      const bookingId = await createBookingOrThrow(unitAmount);
-
-      const meta = {
-        distance: "",
-        minutes: "",
-        from: tripType === "from" ? (TERMINALS[terminal]?.name || `${airport} Terminal`) : (pickup?.formatted || ""),
-        to:   tripType === "to"   ? (TERMINALS[terminal]?.name || `${airport} Terminal`) : (dropoff?.formatted || ""),
-        airport,
-        terminal,
-        dateIso: `${rideDate}T${rideTime}:00`,
-      };
-
-      const res = await fetch("/api/stripe/invoice", {
-        method: "POST",
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify({
-          unitAmount,
-          bookingId,
-          email: session?.user?.email ?? undefined,
-          metadata: meta,
-          daysUntilDue: 3,
-        }),
-      });
-
-      if (!res.ok) {
-        let msg = "Could not create invoice.";
-        try {
-          const j = await res.json();
-          if (j?.error) msg = j.error;
-        } catch {}
-        throw new Error(msg);
-      }
-
-      const data = await res.json();
-      const url = data?.hostedInvoiceUrl || data?.url;
-      if (url) {
-        // Send them to the hosted invoice. Booking already exists in Account.
-        window.location.href = url;
-      } else {
-        throw new Error("Hosted invoice URL missing.");
       }
     } catch (err: any) {
       alert(err?.message || "Booking failed.");
@@ -479,9 +419,7 @@ export default function BookingPage() {
     <>
       <Script
         id="google-maps-script"
-        src={`https://maps.googleapis.com/maps/api/js?key=${
-          process.env.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY ?? ""
-        }&libraries=places&callback=initJetSetPlaces`}
+        src={`https://maps.googleapis.com/maps/api/js?key=${process.env.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY ?? ""}&libraries=places&callback=initJetSetPlaces`}
         strategy="afterInteractive"
         onLoad={onGoogleLoad}
         onReady={onGoogleLoad}
@@ -497,30 +435,21 @@ export default function BookingPage() {
           <div className="flex justify-center gap-3 mb-6">
             <button
               className={`px-4 py-2 rounded ${tripType === "to" ? "text-white" : ""}`}
-              style={{
-                backgroundColor: tripType === "to" ? JETSET_NAVY : "#e5e7eb",
-                color: tripType === "to" ? "#fff" : "#374151",
-              }}
+              style={{ backgroundColor: tripType === "to" ? JETSET_NAVY : "#e5e7eb", color: tripType === "to" ? "#fff" : "#374151" }}
               onClick={() => setTripType("to")}
             >
               To Airport
             </button>
             <button
               className={`px-4 py-2 rounded ${tripType === "from" ? "text-white" : ""}`}
-              style={{
-                backgroundColor: tripType === "from" ? JETSET_NAVY : "#e5e7eb",
-                color: tripType === "from" ? "#fff" : "#374151",
-              }}
+              style={{ backgroundColor: tripType === "from" ? JETSET_NAVY : "#e5e7eb", color: tripType === "from" ? "#fff" : "#374151" }}
               onClick={() => setTripType("from")}
             >
               From Airport
             </button>
             <button
               className={`px-4 py-2 rounded ${tripType === "non" ? "text-white" : ""}`}
-              style={{
-                backgroundColor: tripType === "non" ? JETSET_NAVY : "#e5e7eb",
-                color: tripType === "non" ? "#fff" : "#374151",
-              }}
+              style={{ backgroundColor: tripType === "non" ? JETSET_NAVY : "#e5e7eb", color: tripType === "non" ? "#fff" : "#374151" }}
               onClick={() => setTripType("non")}
             >
               Non-Airport
@@ -530,21 +459,11 @@ export default function BookingPage() {
           {/* Date + Time */}
           <div className="mb-4">
             <label className="block mb-1 font-medium">Select Date</label>
-            <input
-              type="date"
-              value={rideDate}
-              onChange={(e) => setRideDate(e.target.value)}
-              className="w-full px-3 py-2 border rounded"
-            />
+            <input type="date" value={rideDate} onChange={(e) => setRideDate(e.target.value)} className="w-full px-3 py-2 border rounded" />
           </div>
           <div className="mb-4">
             <label className="block mb-1 font-medium">Select Time</label>
-            <input
-              type="time"
-              value={rideTime}
-              onChange={(e) => setRideTime(e.target.value)}
-              className="w-full px-3 py-2 border rounded"
-            />
+            <input type="time" value={rideTime} onChange={(e) => setRideTime(e.target.value)} className="w-full px-3 py-2 border rounded" />
           </div>
 
           {tripType === "to" && (
@@ -604,23 +523,13 @@ export default function BookingPage() {
             </button>
 
             {quoteReady && (
-              <>
-                <button
-                  onClick={handlePayNow}
-                  className="px-6 py-2 rounded font-semibold"
-                  style={{ backgroundColor: JETSET_NAVY, color: "#fff" }}
-                >
-                  Confirm Booking — Pay Now
-                </button>
-
-                <button
-                  onClick={handlePayLater}
-                  className="px-6 py-2 rounded font-semibold border"
-                  style={{ backgroundColor: "#e5e7eb", color: "#374151", borderColor: "#cbd5e1" }}
-                >
-                  Book Now — Pay Later
-                </button>
-              </>
+              <button
+                onClick={handleBookNow}
+                className="px-6 py-2 rounded font-semibold"
+                style={{ backgroundColor: JETSET_NAVY, color: "#fff" }}
+              >
+                Confirm Booking
+              </button>
             )}
           </div>
         </section>

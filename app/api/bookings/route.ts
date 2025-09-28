@@ -14,7 +14,6 @@ export async function GET(req: Request) {
   const user = await prisma.user.findUnique({ where: { email: session.user.email } });
   if (!user) return NextResponse.json([], { status: 200 });
 
-  // ✅ include invoices if query param set
   const { searchParams } = new URL(req.url);
   const includeInvoice = searchParams.get("includeInvoice") === "1";
 
@@ -47,9 +46,9 @@ export async function POST(req: Request) {
     terminal,
     scheduledAt,
     priceCents,
-  } = body;
+  } = body || {};
 
-  if (!pickupAddress || !scheduledAt || !priceCents) {
+  if (!pickupAddress || !scheduledAt || !Number.isInteger(priceCents)) {
     return NextResponse.json({ error: "Missing required fields" }, { status: 400 });
   }
 
@@ -57,9 +56,9 @@ export async function POST(req: Request) {
     data: {
       userId: user.id,
       pickupAddress,
-      dropoffAddress,
-      airport,
-      terminal,
+      dropoffAddress: dropoffAddress || null,
+      airport: airport || null,
+      terminal: terminal || null,
       scheduledAt: new Date(scheduledAt),
       priceCents,
       totalCents: priceCents,
@@ -94,7 +93,7 @@ export async function PUT(req: Request) {
     return NextResponse.json({ error: "Not found" }, { status: 404 });
   }
 
-  const newPrice = priceCents ?? booking.priceCents;
+  const newPrice = Number.isInteger(priceCents) ? priceCents : booking.priceCents;
 
   const updated = await prisma.booking.update({
     where: { id },
@@ -103,7 +102,7 @@ export async function PUT(req: Request) {
       dropoffAddress: dropoffAddress ?? booking.dropoffAddress,
       scheduledAt: scheduledAt ? new Date(scheduledAt) : booking.scheduledAt,
       priceCents: newPrice,
-      totalCents: newPrice, // ✅ keep in sync
+      totalCents: newPrice,
       status: "PENDING",
     },
   });
@@ -111,8 +110,7 @@ export async function PUT(req: Request) {
   return NextResponse.json(updated);
 }
 
-// DELETE /api/bookings?id=BOOKING_ID (legacy)
-// For direct /api/bookings/[id] deletes, use the [id]/route.ts file
+// DELETE /api/bookings?id=BOOKING_ID (legacy soft-delete)
 export async function DELETE(req: Request) {
   const session = await getServerSession(authOptions);
   if (!session?.user?.email) {
@@ -135,7 +133,6 @@ export async function DELETE(req: Request) {
     return NextResponse.json({ error: "Not found" }, { status: 404 });
   }
 
-  // ✅ Instead of deleting, mark as CANCELLED
   await prisma.booking.update({
     where: { id },
     data: { status: "CANCELLED" },

@@ -12,9 +12,10 @@ type UserProfile = {
 
 type Invoice = {
   id: string;
-  status: string;
-  amountDue: number;
-  hostedUrl?: string | null; // show View/Pay link if provided
+  status: string;       // "PAID" | "UNPAID" | "OPEN" | "VOID" | "FAILED" | etc.
+  amountDue: number;    // integer cents
+  hostedUrl?: string | null;
+  receiptUrl?: string | null;
 };
 
 type Booking = {
@@ -23,20 +24,19 @@ type Booking = {
   dropoffAddress: string | null;
   airport: string | null;
   terminal: string | null;
-  scheduledAt: string;
-  priceCents: number;
-  status: string; // "UNPAID" | "PAID" | "PENDING" | "CANCELLED"
+  scheduledAt: string;   // ISO
+  priceCents: number;    // integer cents
+  status: string;        // "UNPAID" | "PENDING" | "PAID" | "CANCELLED" | etc.
   invoice?: Invoice | null;
-  receiptUrl?: string | null;
 };
 
 type Address = {
   id: string;
   label: string;
   line1: string;
-  city: string;
-  state: string;
-  postalCode: string;
+  city?: string | null;
+  state?: string | null;
+  postalCode?: string | null;
 };
 
 export default function AccountPage() {
@@ -49,22 +49,27 @@ export default function AccountPage() {
 
   // Add address form state
   const [newLabel, setNewLabel] = useState("");
-  the [newLine1, setNewLine1] = useState("");
+  const [newLine1, setNewLine1] = useState("");
   const [savingAddress, setSavingAddress] = useState(false);
 
   useEffect(() => {
     if (status !== "authenticated") return;
+
+    let alive = true;
     Promise.all([
-      fetch("/api/user").then((r) => r.json()),
-      fetch("/api/bookings?includeInvoice=1").then((r) => r.json()),
-      fetch("/api/addresses").then((r) => r.json()),
+      fetch("/api/user").then((r) => r.ok ? r.json() : null),
+      fetch("/api/bookings?includeInvoice=1").then((r) => r.ok ? r.json() : []),
+      fetch("/api/addresses").then((r) => r.ok ? r.json() : []),
     ])
-      .then(([user, bookings, addresses]) => {
+      .then(([user, bks, addrs]) => {
+        if (!alive) return;
+        if (!user) setError("Could not load profile.");
         setProfile(user);
-        setBookings(bookings);
-        setAddresses(addresses);
+        setBookings(Array.isArray(bks) ? bks : []);
+        setAddresses(Array.isArray(addrs) ? addrs : []);
       })
-      .catch(() => setError("Could not load account data."));
+      .catch(() => alive && setError("Could not load account data."));
+    return () => { alive = false; };
   }, [status]);
 
   if (status === "unauthenticated") {
@@ -84,11 +89,7 @@ export default function AccountPage() {
 
   async function cancelBooking(id: string) {
     await fetch(`/api/bookings?id=${id}`, { method: "DELETE" });
-    setBookings((b) =>
-      b.map((bk) =>
-        bk.id === id ? { ...bk, status: "CANCELLED" } : bk
-      )
-    );
+    setBookings((b) => b.map((bk) => bk.id === id ? { ...bk, status: "CANCELLED" } : bk));
   }
 
   async function deleteAddress(id: string) {
@@ -130,19 +131,36 @@ export default function AccountPage() {
     }
   }
 
-  // little helper for colored status badge
-  function StatusBadge({ value }: { value: string }) {
-    const v = value?.toUpperCase();
-    const cls =
-      v === "PAID"
-        ? "bg-green-100 text-green-700"
-        : v === "CANCELLED"
-        ? "bg-red-100 text-red-700"
-        : "bg-yellow-100 text-yellow-700"; // UNPAID or PENDING
+  function renderInvoiceBadge(inv?: Invoice | null) {
+    if (!inv) return <p className="text-sm text-gray-500">No invoice yet</p>;
+    const isPaid =
+      inv.status?.toUpperCase() === "PAID" ||
+      inv.status?.toUpperCase() === "SUCCEEDED";
+    const isFailed = inv.status?.toUpperCase() === "FAILED";
+    const cls = isPaid
+      ? "text-green-600 font-bold"
+      : isFailed
+      ? "text-red-600 font-bold"
+      : "text-yellow-600 font-bold";
     return (
-      <span className={`inline-block rounded px-2 py-0.5 text-xs font-semibold ${cls}`}>
-        {v}
-      </span>
+      <div className="text-sm mt-1">
+        <p>
+          Invoice: <span className={cls}>{isPaid ? "PAID" : inv.status?.toUpperCase() || "OPEN"}</span>
+        </p>
+        <p>Amount: ${(Math.max(0, inv.amountDue || 0) / 100).toFixed(2)}</p>
+        <div className="space-x-2 mt-1">
+          {inv.hostedUrl && (
+            <a className="underline text-blue-600" href={inv.hostedUrl} target="_blank" rel="noreferrer">
+              View invoice
+            </a>
+          )}
+          {inv.receiptUrl && (
+            <a className="underline text-blue-600" href={inv.receiptUrl} target="_blank" rel="noreferrer">
+              Receipt
+            </a>
+          )}
+        </div>
+      </div>
     );
   }
 
@@ -165,12 +183,13 @@ export default function AccountPage() {
         <h2 className="text-lg font-semibold mb-2">Upcoming Bookings</h2>
         {bookings.length === 0 && <p>No bookings found.</p>}
         {bookings.map((b) => {
-          const isCancelled = b.status === "CANCELLED";
+          const isCancelled = b.status?.toUpperCase() === "CANCELLED";
+          const money = (Math.max(0, b.priceCents || 0) / 100).toFixed(2);
+
           return (
             <div key={b.id} className="mb-3 border-b pb-2">
               <p className="font-medium">
-                {b.pickupAddress || "Unknown Pickup"} →{" "}
-                {b.dropoffAddress || "Unknown Dropoff"}
+                {b.pickupAddress || "Unknown Pickup"} → {b.dropoffAddress || "Unknown Dropoff"}
               </p>
               {(b.airport || b.terminal) && (
                 <p className="text-sm text-gray-700">
@@ -179,59 +198,13 @@ export default function AccountPage() {
                 </p>
               )}
               <p className="text-sm text-gray-600">
-                {new Date(b.scheduledAt).toLocaleString()} — $
-                {(b.priceCents / 100).toFixed(2)}
+                {new Date(b.scheduledAt).toLocaleString()} — ${money}
+              </p>
+              <p className={`text-sm font-semibold ${isCancelled ? "text-red-600" : ""}`}>
+                Status: {b.status?.toUpperCase() || "UNKNOWN"}
               </p>
 
-              {/* Booking status (PAID / UNPAID / PENDING / CANCELLED) */}
-              <div className="mt-1">
-                <StatusBadge value={b.status} />
-                {b.receiptUrl && b.status?.toUpperCase() === "PAID" && (
-                  <a
-                    href={b.receiptUrl}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="ml-2 text-blue-600 underline"
-                  >
-                    Receipt
-                  </a>
-                )}
-              </div>
-
-              {/* Invoice details */}
-              <div className="text-sm mt-2">
-                {b.invoice ? (
-                  <>
-                    <p>
-                      Invoice:{" "}
-                      <span
-                        className={
-                          b.invoice.status === "PAID"
-                            ? "text-green-600 font-bold"
-                            : b.invoice.status === "FAILED"
-                            ? "text-red-600 font-bold"
-                            : "text-yellow-600 font-bold"
-                        }
-                      >
-                        {b.invoice.status}
-                      </span>{" "}
-                      — Amount: ${(b.invoice.amountDue / 100).toFixed(2)}
-                    </p>
-                    {b.invoice.hostedUrl && b.status?.toUpperCase() !== "PAID" && (
-                      <a
-                        href={b.invoice.hostedUrl}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="text-blue-600 underline"
-                      >
-                        View / Pay Invoice
-                      </a>
-                    )}
-                  </>
-                ) : (
-                  <p className="text-gray-500">No invoice yet</p>
-                )}
-              </div>
+              {renderInvoiceBadge(b.invoice)}
 
               {!isCancelled && (
                 <div className="space-x-2 mt-2">
@@ -261,7 +234,8 @@ export default function AccountPage() {
         {addresses.map((a) => (
           <div key={a.id} className="mb-2 flex justify-between items-center">
             <span>
-              {a.label}: {a.line1}, {a.city}, {a.state} {a.postalCode}
+              {a.label}: {a.line1}
+              {a.city ? `, ${a.city}` : ""}{a.state ? `, ${a.state}` : ""}{a.postalCode ? ` ${a.postalCode}` : ""}
             </span>
             <button
               onClick={() => deleteAddress(a.id)}
@@ -300,4 +274,3 @@ export default function AccountPage() {
     </div>
   );
 }
-

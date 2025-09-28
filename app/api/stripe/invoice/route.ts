@@ -49,9 +49,9 @@ export async function POST(req: Request) {
         headers: { "content-type": "application/json" },
       });
     }
-    if (!priceId && !(Number.isInteger(unitAmount) && unitAmount! > 0)) {
+    if (!priceId && !(Number.isInteger(unitAmount) && unitAmount! >= 100)) {
       return new Response(
-        JSON.stringify({ error: "Provide either a valid priceId or unitAmount (integer cents > 0)." }),
+        JSON.stringify({ error: "Provide either a valid priceId or unitAmount (integer cents ≥ 100)." }),
         { status: 400, headers: { "content-type": "application/json" } }
       );
     }
@@ -95,15 +95,19 @@ export async function POST(req: Request) {
       });
     }
 
-    // Create + finalize invoice (leave open with balance)
+    // Create + finalize + send
     const invoice = await stripe.invoices.create({
       customer: customerId,
       collection_method: "send_invoice",
       days_until_due: Math.max(1, Math.min(60, Number(daysUntilDue) || 3)),
       metadata: safeMeta,
+      // ✅ ensure the pending invoice item above is included on this invoice
+      pending_invoice_items_behavior: "include",
     });
 
     const finalized = await stripe.invoices.finalizeInvoice(invoice.id);
+    // (Optional) you can skip sendInvoice if you prefer to show the hosted link only
+    await stripe.invoices.sendInvoice(finalized.id);
 
     if (!finalized.hosted_invoice_url) {
       return new Response(JSON.stringify({ error: "Stripe did not return a hosted invoice URL." }), {

@@ -7,10 +7,6 @@ datasource db {
   url      = env("DATABASE_URL")
 }
 
-// ===========================
-// Models
-// ===========================
-
 model User {
   id                     String    @id @default(cuid())
   name                   String?
@@ -23,12 +19,10 @@ model User {
   stripeCurrentPeriodEnd DateTime?
   role                   UserRole  @default(USER)
   password               String?
-  
-  // Relations
   accounts               Account[]
+  Address                Address[]
   bookings               Booking[]
   sessions               Session[]
-  addresses              Address[]
 }
 
 model Account {
@@ -44,7 +38,6 @@ model Account {
   scope             String?
   id_token          String?
   session_state     String?
-
   user              User    @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@unique([provider, providerAccountId])
@@ -55,7 +48,6 @@ model Session {
   sessionToken String   @unique
   userId       String
   expires      DateTime
-
   user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
 }
 
@@ -67,23 +59,24 @@ model Booking {
   stripeId               String?       @unique
   stripePriceId          String?
   stripeCurrentPeriodEnd DateTime?
-
-  user                   User          @relation(fields: [userId], references: [id], onDelete: Cascade)
-
-  pickupAddress          String?
   dropoffAddress         String?
+  notes                  String?
+  pickupAddress          String?
+  receiptUrl             String?
+  totalCents             Int?
+  priceCents             Int
+  scheduledAt            DateTime
   airport                String?
   terminal               String?
-  totalCents             Int?
-  receiptUrl             String?
-  notes                  String?
+  user                   User          @relation(fields: [userId], references: [id], onDelete: Cascade)
 
-  scheduledAt            DateTime
-  priceCents             Int
+  // Link to Invoice (one-to-one)
+  invoice   Invoice? @relation(fields: [invoiceId], references: [id])
+  invoiceId String?  @unique
 }
 
 model Address {
-  id         String   @id @default(cuid())
+  id         String   @id
   userId     String
   label      String
   line1      String
@@ -93,12 +86,11 @@ model Address {
   postalCode String
   isDefault  Boolean  @default(false)
   createdAt  DateTime @default(now())
-  updatedAt  DateTime @updatedAt
+  updatedAt  DateTime
+  User       User     @relation(fields: [userId], references: [id], onDelete: Cascade)
 
-  user       User     @relation(fields: [userId], references: [id], onDelete: Cascade)
-
+  @@unique([userId, label])
   @@index([userId])
-  @@unique([userId, label], name: "userId_label") // <-- Added this
 }
 
 model VerificationToken {
@@ -109,19 +101,27 @@ model VerificationToken {
   @@unique([identifier, token])
 }
 
-// ===========================
-// Enums
-// ===========================
+model Invoice {
+  id         String   @id               // Stripe invoice.id
+  customerId String
+  status     String                     // "PAID" | "FAILED" | "OPEN"
+  amountDue  Int
+  createdAt  DateTime @default(now())
+
+  // Back-link to Booking (one-to-one)
+  booking    Booking?
+}
+
+enum BookingStatus {
+  PENDING
+  CONFIRMED
+  CANCELLED
+  AWAITING_PAYMENT
+  PAID
+}
 
 enum UserRole {
   USER
   ADMIN
 }
 
-enum BookingStatus {
-  PENDING
-  AWAITING_PAYMENT
-  PAID
-  CONFIRMED
-  CANCELLED
-}

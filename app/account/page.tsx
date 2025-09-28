@@ -10,6 +10,12 @@ type UserProfile = {
   email: string | null;
 };
 
+type Invoice = {
+  id: string;
+  status: string;
+  amountDue: number;
+};
+
 type Booking = {
   id: string;
   pickupAddress: string | null;
@@ -19,6 +25,7 @@ type Booking = {
   scheduledAt: string;
   priceCents: number;
   status: string;
+  invoice?: Invoice | null;
 };
 
 type Address = {
@@ -47,7 +54,7 @@ export default function AccountPage() {
     if (status !== "authenticated") return;
     Promise.all([
       fetch("/api/user").then((r) => r.json()),
-      fetch("/api/bookings").then((r) => r.json()),
+      fetch("/api/bookings?includeInvoice=1").then((r) => r.json()),
       fetch("/api/addresses").then((r) => r.json()),
     ])
       .then(([user, bookings, addresses]) => {
@@ -74,7 +81,7 @@ export default function AccountPage() {
   }
 
   async function cancelBooking(id: string) {
-    await fetch(`/api/bookings/${id}`, { method: "DELETE" });
+    await fetch(`/api/bookings?id=${id}`, { method: "DELETE" });
     setBookings((b) =>
       b.map((bk) =>
         bk.id === id ? { ...bk, status: "CANCELLED" } : bk
@@ -164,6 +171,29 @@ export default function AccountPage() {
               >
                 Status: {b.status}
               </p>
+
+              {/* Invoice details */}
+              {b.invoice ? (
+                <div className="text-sm mt-1">
+                  <p>
+                    Invoice:{" "}
+                    <span
+                      className={
+                        b.invoice.status === "PAID"
+                          ? "text-green-600 font-bold"
+                          : b.invoice.status === "FAILED"
+                          ? "text-red-600 font-bold"
+                          : "text-yellow-600 font-bold"
+                      }
+                    >
+                      {b.invoice.status}
+                    </span>
+                  </p>
+                  <p>Amount: ${(b.invoice.amountDue / 100).toFixed(2)}</p>
+                </div>
+              ) : (
+                <p className="text-sm text-gray-500">No invoice yet</p>
+              )}
 
               {!isCancelled && (
                 <div className="space-x-2 mt-1">

@@ -7,16 +7,21 @@ import { prisma } from "@/lib/prisma";
 export const runtime = "nodejs";
 
 // GET /api/bookings → list current user's bookings
-export async function GET() {
+export async function GET(req: Request) {
   const session = await getServerSession(authOptions);
   if (!session?.user?.email) return NextResponse.json([], { status: 200 });
 
   const user = await prisma.user.findUnique({ where: { email: session.user.email } });
   if (!user) return NextResponse.json([], { status: 200 });
 
+  // ✅ include invoices if query param set
+  const { searchParams } = new URL(req.url);
+  const includeInvoice = searchParams.get("includeInvoice") === "1";
+
   const bookings = await prisma.booking.findMany({
     where: { userId: user.id },
     orderBy: { scheduledAt: "asc" },
+    include: includeInvoice ? { invoice: true } : undefined,
   });
 
   return NextResponse.json(bookings);
@@ -87,7 +92,11 @@ export async function DELETE(req: Request) {
     return NextResponse.json({ error: "Not found" }, { status: 404 });
   }
 
-  await prisma.booking.delete({ where: { id } });
+  // ✅ Instead of deleting, mark as CANCELLED
+  await prisma.booking.update({
+    where: { id },
+    data: { status: "CANCELLED" },
+  });
 
   return NextResponse.json({ ok: true });
 }

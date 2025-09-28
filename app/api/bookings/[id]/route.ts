@@ -32,11 +32,11 @@ export async function DELETE(
     return NextResponse.json({ error: "Not found" }, { status: 404 });
   }
 
-  // Mark booking as cancelled
-  await prisma.booking.update({
+  // ✅ Mark booking as cancelled and return updated record
+  const updated = await prisma.booking.update({
     where: { id: params.id },
     data: { status: "CANCELLED" },
   });
 
-  return NextResponse.json({ ok: true });
+  return NextResponse.json(updated);
 }

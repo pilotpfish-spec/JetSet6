@@ -1,4 +1,3 @@
-// app/booking/page.tsx
 "use client";
 
 import { useEffect, useRef, useState } from "react";
@@ -19,6 +18,7 @@ type AirportCode = "DFW" | "DAL";
 const JETSET_NAVY = "#0a1a2f";
 const JETSET_YELLOW = "#FFD700";
 
+// ✅ Coordinates for airports and terminals
 const TERMINALS: Record<string, { name: string; lat: number; lng: number }> = {
   "DFW-A": { name: "DFW Terminal A", lat: 32.8998, lng: -97.0403 },
   "DFW-B": { name: "DFW Terminal B", lat: 32.899, lng: -97.0526 },
@@ -29,11 +29,13 @@ const TERMINALS: Record<string, { name: string; lat: number; lng: number }> = {
   DAL: { name: "Dallas Love Field", lat: 32.8471, lng: -96.8517 },
 };
 
+// --- tiny fare helper so we always have a number to send to Stripe ---
 function calcFareCents(miles: number): number {
-  const base = 45;
+  const base = 45; // USD
   const extraMiles = Math.max(0, miles - 20);
-  const extra = extraMiles * 1.5;
-  return Math.round((base + extra) * 100);
+  const extra = extraMiles * 1.5; // USD per mile
+  const total = base + extra; // traffic surcharge currently 0
+  return Math.round(total * 100);
 }
 
 function AddressAutocomplete(props: {
@@ -42,7 +44,10 @@ function AddressAutocomplete(props: {
   placeholder?: string;
   disabled?: boolean;
   initialValue?: string;
-  onConfirmed: (payload: { formatted: string; latLng?: { lat: number; lng: number } }) => void;
+  onConfirmed: (payload: {
+    formatted: string;
+    latLng?: { lat: number; lng: number };
+  }) => void;
 }) {
   const { id, label, placeholder = "Start typing…", disabled, initialValue, onConfirmed } = props;
 
@@ -89,7 +94,9 @@ function AddressAutocomplete(props: {
         }
       };
       el.addEventListener("keydown", handleEnter);
-      return () => el.removeEventListener("keydown", handleEnter);
+      return () => {
+        el.removeEventListener("keydown", handleEnter);
+      };
     }
   }, [id, disabled]);
 
@@ -129,13 +136,19 @@ export default function BookingPage() {
 
   useEffect(() => {
     window.initJetSetPlaces = () => {
-      if (window.google?.maps?.places) setGoogleReady(true);
+      if (window.google?.maps?.places) {
+        setGoogleReady(true);
+      }
     };
-    if (window.google?.maps?.places) setGoogleReady(true);
+    if (window.google?.maps?.places) {
+      setGoogleReady(true);
+    }
   }, []);
 
   const onGoogleLoad = () => {
-    if (window.google?.maps?.places) setGoogleReady(true);
+    if (window.google?.maps?.places) {
+      setGoogleReady(true);
+    }
   };
 
   const validateForQuote = (): string | null => {
@@ -151,6 +164,7 @@ export default function BookingPage() {
     return null;
   };
 
+  // Build origin/destination based on tripType
   const getOD = () => {
     let origin: any;
     let destination: any;
@@ -168,6 +182,7 @@ export default function BookingPage() {
     return { origin, destination };
   };
 
+  // Compute miles & minutes (used for quote + fallback fare for Stripe)
   async function computeTripStats(): Promise<{ miles: number; minutes: number } | null> {
     if (!window.google?.maps?.DistanceMatrixService) return null;
 
@@ -182,10 +197,16 @@ export default function BookingPage() {
           destinations: [destination],
           travelMode: window.google.maps.TravelMode.DRIVING,
           unitSystem: window.google.maps.UnitSystem.IMPERIAL,
-          drivingOptions: { departureTime: departureDateTime, trafficModel: "bestguess" },
+          drivingOptions: {
+            departureTime: departureDateTime,
+            trafficModel: "bestguess",
+          },
         },
         (response: any, status: string) => {
-          if (status !== "OK") return resolve(null);
+          if (status !== "OK") {
+            resolve(null);
+            return;
+          }
           try {
             const elem = response.rows[0].elements[0];
             const meters = elem.distance.value;
@@ -203,17 +224,26 @@ export default function BookingPage() {
 
   const handleQuote = async () => {
     const problem = validateForQuote();
-    if (problem) { setError(problem); return; }
+    if (problem) {
+      setError(problem);
+      return;
+    }
     setError(null);
     setQuoteReady(true);
 
     const stats = await computeTripStats();
-    if (!stats) { setError("Error fetching distance from Google."); return; }
+    if (!stats) {
+      setError("Error fetching distance from Google.");
+      return;
+    }
 
     const { miles, minutes } = stats;
     const cents = calcFareCents(miles);
-    try { sessionStorage.setItem("JETSET_QUOTE_TOTAL_CENTS", String(cents)); } catch {}
+    try {
+      sessionStorage.setItem("JETSET_QUOTE_TOTAL_CENTS", String(cents));
+    } catch {}
 
+    // ✅ include full trip context in query string
     const params = new URLSearchParams({
       distance: miles.toFixed(1),
       minutes: minutes.toFixed(0),
@@ -227,10 +257,14 @@ export default function BookingPage() {
     router.push(`/quote?${params.toString()}`);
   };
 
+  // --- Stripe call + redirect (Confirm Booking) ---
   async function handleBookNow() {
-    if (!session) { signIn(); return; }
+    if (!session) {
+      signIn();
+      return;
+    }
 
-    let unitAmount = 4500;
+    let unitAmount = 4500; // default to $45
     try {
       const stored = sessionStorage.getItem("JETSET_QUOTE_TOTAL_CENTS");
       if (stored && !Number.isNaN(Number(stored))) {
@@ -246,19 +280,8 @@ export default function BookingPage() {
 
     const payload = {
       unitAmount,
+      bookingId: "temp-id-123",
       email: session?.user?.email ?? undefined,
-      bookingId: crypto.randomUUID(),
-      metadata: {
-        distance: new URLSearchParams(location.search).get("distance") || "",
-        minutes: new URLSearchParams(location.search).get("minutes") || "",
-        from: new URLSearchParams(location.search).get("from") || "",
-        to: new URLSearchParams(location.search).get("to") || "",
-        airport: new URLSearchParams(location.search).get("airport") || "",
-        terminal: new URLSearchParams(location.search).get("terminal") || "",
-        dateIso: new URLSearchParams(location.search).get("dateIso") || "",
-      },
-      successPath: "/account?paid=1",
-      cancelPath: "/booking?canceled=1",
     };
 
     const res = await fetch("/api/stripe/checkout", {
@@ -268,8 +291,7 @@ export default function BookingPage() {
     });
 
     if (!res.ok) {
-      const err = await res.json().catch(() => ({}));
-      alert(err?.error || "Could not start checkout.");
+      alert("Could not start checkout.");
       return;
     }
 
@@ -319,7 +341,9 @@ export default function BookingPage() {
     <>
       <Script
         id="google-maps-script"
-        src={`https://maps.googleapis.com/maps/api/js?key=${process.env.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY ?? ""}&libraries=places&callback=initJetSetPlaces`}
+        src={`https://maps.googleapis.com/maps/api/js?key=${
+          process.env.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY ?? ""
+        }&libraries=places&callback=initJetSetPlaces`}
         strategy="afterInteractive"
         onLoad={onGoogleLoad}
         onReady={onGoogleLoad}
@@ -331,31 +355,104 @@ export default function BookingPage() {
             Ground Service Elevated
           </h1>
 
+          {/* Trip Type */}
           <div className="flex justify-center gap-3 mb-6">
             <button
               className={`px-4 py-2 rounded ${tripType === "to" ? "text-white" : ""}`}
-              style={{ backgroundColor: tripType === "to" ? JETSET_NAVY : "#e5e7eb", color: tripType === "to" ? "#fff" : "#374151" }}
+              style={{
+                backgroundColor: tripType === "to" ? JETSET_NAVY : "#e5e7eb",
+                color: tripType === "to" ? "#fff" : "#374151",
+              }}
               onClick={() => setTripType("to")}
             >
               To Airport
             </button>
             <button
               className={`px-4 py-2 rounded ${tripType === "from" ? "text-white" : ""}`}
-              style={{ backgroundColor: tripType === "from" ? JETSET_NAVY : "#e5e7eb", color: tripType === "from" ? "#fff" : "#374151" }}
+              style={{
+                backgroundColor: tripType === "from" ? JETSET_NAVY : "#e5e7eb",
+                color: tripType === "from" ? "#fff" : "#374151",
+              }}
               onClick={() => setTripType("from")}
             >
               From Airport
             </button>
             <button
               className={`px-4 py-2 rounded ${tripType === "non" ? "text-white" : ""}`}
-              style={{ backgroundColor: tripType === "non" ? JETSET_NAVY : "#e5e7eb", color: tripType === "non" ? "#fff" : "#374151" }}
+              style={{
+                backgroundColor: tripType === "non" ? JETSET_NAVY : "#e5e7eb",
+                color: tripType === "non" ? "#fff" : "#374151",
+              }}
               onClick={() => setTripType("non")}
             >
               Non-Airport
             </button>
           </div>
 
-          {/* the rest of your booking inputs remain as-is ... */}
+          {/* Date + Time */}
+          <div className="mb-4">
+            <label className="block mb-1 font-medium">Select Date</label>
+            <input
+              type="date"
+              value={rideDate}
+              onChange={(e) => setRideDate(e.target.value)}
+              className="w-full px-3 py-2 border rounded"
+            />
+          </div>
+          <div className="mb-4">
+            <label className="block mb-1 font-medium">Select Time</label>
+            <input
+              type="time"
+              value={rideTime}
+              onChange={(e) => setRideTime(e.target.value)}
+              className="w-full px-3 py-2 border rounded"
+            />
+          </div>
+
+          {tripType === "to" && (
+            <>
+              <AddressAutocomplete
+                id="pickup"
+                label="Pickup Address"
+                placeholder={googleReady ? "Start typing…" : "Loading Google…"}
+                disabled={!googleReady}
+                onConfirmed={(p) => setPickup({ formatted: p.formatted, latLng: p.latLng })}
+              />
+              <AirportFields />
+            </>
+          )}
+
+          {tripType === "from" && (
+            <>
+              <AirportFields />
+              <AddressAutocomplete
+                id="dropoff"
+                label="Drop-off Address"
+                placeholder={googleReady ? "Start typing…" : "Loading Google…"}
+                disabled={!googleReady}
+                onConfirmed={(p) => setDropoff({ formatted: p.formatted, latLng: p.latLng })}
+              />
+            </>
+          )}
+
+          {tripType === "non" && (
+            <>
+              <AddressAutocomplete
+                id="pickup-non"
+                label="Pickup Address"
+                placeholder={googleReady ? "Start typing…" : "Loading Google…"}
+                disabled={!googleReady}
+                onConfirmed={(p) => setPickup({ formatted: p.formatted, latLng: p.latLng })}
+              />
+              <AddressAutocomplete
+                id="dropoff-non"
+                label="Drop-off Address"
+                placeholder={googleReady ? "Start typing…" : "Loading Google…"}
+                disabled={!googleReady}
+                onConfirmed={(p) => setDropoff({ formatted: p.formatted, latLng: p.latLng })}
+              />
+            </>
+          )}
 
           {error && <p className="text-sm mt-2" style={{ color: "#b91c1c" }}>{error}</p>}
 
@@ -383,4 +480,3 @@ export default function BookingPage() {
     </>
   );
 }
-

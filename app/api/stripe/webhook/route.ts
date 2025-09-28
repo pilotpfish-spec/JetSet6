@@ -1,87 +1,67 @@
-import { NextResponse } from "next/server";
-import { stripe } from "@/lib/stripe";
-import prisma from "@/lib/prisma";
+// app/api/stripe/webhook/route.ts
+import Stripe from "stripe";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
+function assertEnv(name: string): string {
+  const v = process.env[name];
+  if (!v) throw new Error(`Missing required environment variable: ${name}`);
+  return v;
+}
+
 export async function POST(req: Request) {
-  const buf = await req.arrayBuffer();
-  const rawBody = Buffer.from(buf);
-  const sig = req.headers.get("stripe-signature") || "";
+  const secret = assertEnv("STRIPE_WEBHOOK_SECRET");
+  const stripe = new Stripe(assertEnv("STRIPE_SECRET_KEY"), { apiVersion: "2024-06-20" as any });
+
+  const sig = req.headers.get("stripe-signature");
+  if (!sig) return new Response("Missing signature", { status: 400 });
+
+  const raw = await req.text();
+  let event: Stripe.Event;
 
   try {
-    const event = stripe.webhooks.constructEvent(
-      rawBody,
-      sig,
-      process.env.STRIPE_WEBHOOK_SECRET!
-    );
+    event = stripe.webhooks.constructEvent(raw, sig, secret);
+  } catch (err: any) {
+    console.error("[stripe webhook] signature verify failed", err?.message);
+    return new Response("Bad signature", { status: 400 });
+  }
 
+  try {
     switch (event.type) {
       case "checkout.session.completed": {
-        const session = event.data.object as any;
-
-        // Example: update booking as paid
-        if (session.metadata?.bookingId) {
-          await prisma.booking.update({
-            where: { id: session.metadata.bookingId },
-            data: { status: "PAID" },
-          });
-        }
-
+        const session = event.data.object as Stripe.Checkout.Session;
+        console.log("checkout.session.completed", {
+          id: session.id,
+          amount_total: session.amount_total,
+          customer: session.customer,
+          email: session.customer_details?.email,
+          metadata: session.metadata,
+        });
         break;
       }
-
-      case "invoice.paid": {
-        const invoice = event.data.object as any;
-
-        // Example: mark invoice paid
-        if (invoice.id) {
-          await prisma.invoice.upsert({
-            where: { id: invoice.id },
-            update: { status: "PAID" },
-            create: {
-              id: invoice.id,
-              customerId: invoice.customer as string,
-              status: "PAID",
-              amountDue: invoice.amount_due,
-            },
-          });
-        }
-
+      case "invoice.payment_succeeded":
+      case "invoice.finalized":
+      case "invoice.sent": {
+        const invoice = event.data.object as Stripe.Invoice;
+        console.log(event.type, {
+          id: invoice.id,
+          customer: invoice.customer,
+          email: invoice.customer_email,
+          amount_due: invoice.amount_due,
+          hosted_invoice_url: invoice.hosted_invoice_url,
+          metadata: invoice.metadata,
+        });
         break;
       }
-
-      case "invoice.payment_failed": {
-        const invoice = event.data.object as any;
-
-        // Example: mark invoice unpaid/failed
-        if (invoice.id) {
-          await prisma.invoice.upsert({
-            where: { id: invoice.id },
-            update: { status: "FAILED" },
-            create: {
-              id: invoice.id,
-              customerId: invoice.customer as string,
-              status: "FAILED",
-              amountDue: invoice.amount_due,
-            },
-          });
-        }
-
-        break;
-      }
-
       default:
-        console.log(`Unhandled event type: ${event.type}`);
+        // Keep the endpoint flexible for future events
+        console.log("Unhandled event", event.type);
     }
 
-    return NextResponse.json({ received: true }, { status: 200 });
-  } catch (err: any) {
-    console.error("❌ Webhook error:", err.message);
-    return NextResponse.json(
-      { error: `Webhook Error: ${err.message}` },
-      { status: 400 }
-    );
+    return new Response("ok");
+  } catch (e: any) {
+    console.error("[stripe webhook] handler error", e?.message || e);
+    return new Response("handler error", { status: 500 });
   }
 }

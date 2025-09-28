@@ -1,130 +1,129 @@
 // app/api/stripe/invoice/route.ts
-import { NextResponse } from "next/server";
-import { stripe } from "@/lib/stripe";
-import { getServerSession } from "next-auth";
-import { authOptions } from "@/lib/auth";
-import { prisma } from "@/lib/prisma";
+import Stripe from "stripe";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
-type Body = {
-  unitAmount: number;
-  email: string;
-  description?: string;
-  daysUntilDue?: number;
-  dateIso?: string;
-  pickupAddress?: string;
-  dropoffAddress?: string;
+type Meta = {
+  bookingId?: string;
+  distance?: string;
+  minutes?: string;
+  from?: string;
+  to?: string;
   airport?: string;
   terminal?: string;
+  dateIso?: string;
 };
 
-function fmtWhen(dateIso?: string) {
-  if (!dateIso) return "";
-  const d = new Date(dateIso);
-  return isNaN(d.getTime()) ? "" : d.toLocaleString(undefined, { dateStyle: "long", timeStyle: "short" });
+function assertEnv(name: string): string {
+  const v = process.env[name];
+  if (!v) throw new Error(`Missing required environment variable: ${name}`);
+  return v;
 }
-const compact = (s?: string) => (s || "").trim().replace(/\s+/g, " ");
 
 export async function POST(req: Request) {
-  let step = "start";
+  const stripeSecret = assertEnv("STRIPE_SECRET_KEY");
+  const stripe = new Stripe(stripeSecret, { apiVersion: "2024-06-20" as any });
+
   try {
-    const session = await getServerSession(authOptions);
-    if (!session?.user?.id) {
-      return NextResponse.json({ error: "Unauthorized (sign in required)" }, { status: 401 });
-    }
-    const userId = (session.user as any).id as string;
+    const body = await req.json().catch(() => ({} as any));
+    const {
+      email,
+      priceId,
+      unitAmount,
+      bookingId,
+      metadata,
+      daysUntilDue = 3,
+    }: {
+      email?: string;
+      priceId?: string;
+      unitAmount?: number;
+      bookingId?: string;
+      metadata?: Record<string, any>;
+      daysUntilDue?: number;
+    } = body || {};
 
-    const body = (await req.json()) as Body;
-
-    step = "validate";
-    const cents = Math.round(Number(body.unitAmount));
-    if (!Number.isFinite(cents) || cents < 50) {
-      return NextResponse.json({ error: "Invalid unitAmount (min 50 cents)" }, { status: 400 });
-    }
-    const email = (body.email || "").trim();
     if (!email) {
-      return NextResponse.json({ error: "Email is required" }, { status: 400 });
+      return new Response(JSON.stringify({ error: "Email is required to create an invoice." }), {
+        status: 400,
+        headers: { "content-type": "application/json" },
+      });
+    }
+    if (!priceId && !(Number.isInteger(unitAmount) && unitAmount! >= 100)) {
+      return new Response(
+        JSON.stringify({ error: "Provide either a valid priceId or unitAmount (integer cents ≥ 100)." }),
+        { status: 400, headers: { "content-type": "application/json" } }
+      );
     }
 
-    step = "format";
-    const when = fmtWhen(body.dateIso);
-    const pickup = compact(body.pickupAddress);
-    const dropoff = compact(body.dropoffAddress);
-    const airport = compact(body.airport);
-    const terminal = compact(body.terminal);
+    // Find or create customer
+    let customerId: string;
+    const found = await stripe.customers.list({ email, limit: 1 });
+    if (found.data.length > 0) {
+      customerId = found.data[0].id;
+    } else {
+      const created = await stripe.customers.create({ email });
+      customerId = created.id;
+    }
 
-    const parts: string[] = [];
-    if (pickup || dropoff) parts.push([pickup, dropoff].filter(Boolean).join(" → "));
-    if (airport && terminal) parts.push(`${airport} — ${terminal}`);
-    else if (airport) parts.push(airport);
-    if (when) parts.push(when);
+    const safeMeta: Meta = {
+      bookingId: bookingId?.toString(),
+      distance: metadata?.distance?.toString() ?? undefined,
+      minutes: metadata?.minutes?.toString() ?? undefined,
+      from: metadata?.from?.toString() ?? undefined,
+      to: metadata?.to?.toString() ?? undefined,
+      airport: metadata?.airport?.toString() ?? undefined,
+      terminal: metadata?.terminal?.toString() ?? undefined,
+      dateIso: metadata?.dateIso?.toString() ?? undefined,
+    };
 
-    const lineDescription =
-      body.description ||
-      (parts.length ? `Ground Service — ${parts.join(" | ")}` : "Ground Service — Pay Later");
+    // Add an invoice item
+    if (priceId) {
+      await stripe.invoiceItems.create({
+        customer: customerId,
+        price: priceId,
+        quantity: 1,
+        metadata: safeMeta,
+      });
+    } else {
+      await stripe.invoiceItems.create({
+        customer: customerId,
+        currency: "usd",
+        amount: unitAmount!,
+        description: "JetSet Direct Ride",
+        metadata: safeMeta,
+      });
+    }
 
-    step = "db.create";
-    const booking = await prisma.booking.create({
-      data: {
-        userId,
-        pickup,
-        dropoff,
-        status: "UNPAID",
-        priceCents: cents,
-        scheduledAt: body.dateIso ? new Date(body.dateIso) : new Date(),
-      },
-    });
-
-    step = "stripe.customer";
-    const customer = await stripe.customers.create({ email });
-
-    step = "stripe.invoice";
-    const custom_fields = [
-      when ? { name: "Service Date", value: when } : undefined,
-      pickup ? { name: "Pickup", value: pickup } : undefined,
-      dropoff ? { name: "Dropoff", value: dropoff } : undefined,
-      airport || terminal ? { name: "Airport/Terminal", value: [airport, terminal].filter(Boolean).join(" — ") } : undefined,
-    ].filter(Boolean) as { name: string; value: string }[];
-
+    // Create + finalize + send
     const invoice = await stripe.invoices.create({
-      customer: customer.id,
+      customer: customerId,
       collection_method: "send_invoice",
-      days_until_due: typeof body.daysUntilDue === "number" ? Math.max(1, Math.floor(body.daysUntilDue)) : 7,
-      metadata: { bookingId: booking.id, pickup, dropoff, airport, terminal, dateIso: body.dateIso || "" },
-      description: lineDescription,
-      footer: "Thank you for choosing JetSet Direct — Ground Service Elevated.",
-      ...(custom_fields.length ? { custom_fields } : {}),
+      days_until_due: Math.max(1, Math.min(60, Number(daysUntilDue) || 3)),
+      metadata: safeMeta,
     });
 
-    step = "stripe.line";
-    await stripe.invoiceItems.create({
-      customer: customer.id,
-      currency: "usd",
-      amount: cents,
-      description: lineDescription,
-      metadata: { bookingId: booking.id },
-      invoice: invoice.id,
-    });
-
-    step = "stripe.finalize";
     const finalized = await stripe.invoices.finalizeInvoice(invoice.id);
+    // (Optional) you can skip sendInvoice if you prefer to show the hosted link only
     await stripe.invoices.sendInvoice(finalized.id);
 
-    const url = finalized.hosted_invoice_url || invoice.hosted_invoice_url;
-    if (!url) return NextResponse.json({ error: "Invoice URL unavailable" }, { status: 500 });
+    if (!finalized.hosted_invoice_url) {
+      return new Response(JSON.stringify({ error: "Stripe did not return a hosted invoice URL." }), {
+        status: 502,
+        headers: { "content-type": "application/json" },
+      });
+    }
 
-    return NextResponse.json({
-      bookingId: booking.id,
-      invoiceId: finalized.id,
-      url,
-      amountDue: finalized.amount_due,
-      currency: finalized.currency,
-      status: finalized.status,
+    return new Response(JSON.stringify({ hostedInvoiceUrl: finalized.hosted_invoice_url }), {
+      status: 200,
+      headers: { "content-type": "application/json" },
     });
   } catch (err: any) {
-    console.error("invoice error @", step, err?.message || err);
-    return NextResponse.json({ error: "Internal error", step }, { status: 500 });
+    console.error("[/api/stripe/invoice] error", err?.message || err);
+    const msg = err?.raw?.message || err?.message || "Invoice creation failed.";
+    return new Response(JSON.stringify({ error: msg }), {
+      status: 500,
+      headers: { "content-type": "application/json" },
+    });
   }
 }

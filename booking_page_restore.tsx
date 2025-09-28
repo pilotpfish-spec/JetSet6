@@ -38,13 +38,6 @@ function calcFareCents(miles: number): number {
   return Math.round(total * 100);
 }
 
-// Join date + time safely
-function toScheduledIso(dateStr: string, timeStr: string): string {
-  if (!dateStr || !timeStr) return "";
-  const d = new Date(`${dateStr}T${timeStr}:00`);
-  return d.toISOString();
-}
-
 function AddressAutocomplete(props: {
   id: string;
   label: string;
@@ -264,50 +257,8 @@ export default function BookingPage() {
     router.push(`/quote?${params.toString()}`);
   };
 
-  // --- Create booking (so Account can show it) ---
-  async function createBookingOrThrow(priceCents: number): Promise<string> {
-    const scheduledAtIso = toScheduledIso(rideDate, rideTime);
-    if (!scheduledAtIso) throw new Error("Please select date and time.");
-
-    const payload = {
-      pickupAddress:
-        tripType === "from" ? (TERMINALS[terminal]?.name || `${airport} Terminal`) : (pickup?.formatted || ""),
-      dropoffAddress:
-        tripType === "to" ? (TERMINALS[terminal]?.name || `${airport} Terminal`) : (dropoff?.formatted || ""),
-      airport,
-      terminal,
-      scheduledAt: scheduledAtIso,
-      priceCents,
-    };
-
-    const res = await fetch("/api/bookings", {
-      method: "POST",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify(payload),
-    });
-
-    if (!res.ok) {
-      let msg = "Failed to create booking.";
-      try {
-        const j = await res.json();
-        if (j?.error) msg = j.error;
-      } catch {}
-      throw new Error(msg);
-    }
-
-    const booking = await res.json();
-    if (!booking?.id) throw new Error("Booking created but no id returned.");
-
-    try {
-      sessionStorage.setItem("JETSET_BOOKING_ID", String(booking.id));
-      sessionStorage.setItem("JETSET_BOOKING_PRICE", String(priceCents));
-    } catch {}
-
-    return String(booking.id);
-  }
-
-  // --- Stripe: Pay Now (Checkout) ---
-  async function handlePayNow() {
+  // --- Stripe call + redirect (Confirm Booking) ---
+  async function handleBookNow() {
     if (!session) {
       signIn();
       return;
@@ -327,117 +278,28 @@ export default function BookingPage() {
       if (stats) unitAmount = calcFareCents(stats.miles);
     }
 
-    try {
-      // 1) Create booking first so Account can show it
-      const bookingId = await createBookingOrThrow(unitAmount);
+    const payload = {
+      unitAmount,
+      bookingId: "temp-id-123",
+      email: session?.user?.email ?? undefined,
+    };
 
-      // 2) Trip context for Stripe reconciliation
-      const meta = {
-        distance: "",
-        minutes: "",
-        from: tripType === "from" ? (TERMINALS[terminal]?.name || `${airport} Terminal`) : (pickup?.formatted || ""),
-        to:   tripType === "to"   ? (TERMINALS[terminal]?.name || `${airport} Terminal`) : (dropoff?.formatted || ""),
-        airport,
-        terminal,
-        dateIso: `${rideDate}T${rideTime}:00`,
-      };
+    const res = await fetch("/api/stripe/checkout", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify(payload),
+    });
 
-      const res = await fetch("/api/stripe/checkout", {
-        method: "POST",
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify({
-          unitAmount,
-          bookingId,
-          email: session?.user?.email ?? undefined,
-          metadata: meta,
-        }),
-      });
-
-      if (!res.ok) {
-        let msg = "Could not start checkout.";
-        try {
-          const j = await res.json();
-          if (j?.error) msg = j.error;
-        } catch {}
-        throw new Error(msg);
-      }
-
-      const data = await res.json();
-      if (data?.url) {
-        window.location.href = data.url;
-      } else {
-        throw new Error("Checkout URL missing.");
-      }
-    } catch (err: any) {
-      alert(err?.message || "Booking failed.");
-    }
-  }
-
-  // --- Stripe: Pay Later (Invoice) ---
-  async function handlePayLater() {
-    if (!session) {
-      signIn();
+    if (!res.ok) {
+      alert("Could not start checkout.");
       return;
     }
 
-    let unitAmount = 4500;
-    try {
-      const stored = sessionStorage.getItem("JETSET_QUOTE_TOTAL_CENTS");
-      if (stored && !Number.isNaN(Number(stored))) {
-        unitAmount = Number(stored);
-      } else {
-        const stats = await computeTripStats();
-        if (stats) unitAmount = calcFareCents(stats.miles);
-      }
-    } catch {
-      const stats = await computeTripStats();
-      if (stats) unitAmount = calcFareCents(stats.miles);
-    }
-
-    try {
-      const bookingId = await createBookingOrThrow(unitAmount);
-
-      const meta = {
-        distance: "",
-        minutes: "",
-        from: tripType === "from" ? (TERMINALS[terminal]?.name || `${airport} Terminal`) : (pickup?.formatted || ""),
-        to:   tripType === "to"   ? (TERMINALS[terminal]?.name || `${airport} Terminal`) : (dropoff?.formatted || ""),
-        airport,
-        terminal,
-        dateIso: `${rideDate}T${rideTime}:00`,
-      };
-
-      const res = await fetch("/api/stripe/invoice", {
-        method: "POST",
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify({
-          unitAmount,
-          bookingId,
-          email: session?.user?.email ?? undefined,
-          metadata: meta,
-          daysUntilDue: 3,
-        }),
-      });
-
-      if (!res.ok) {
-        let msg = "Could not create invoice.";
-        try {
-          const j = await res.json();
-          if (j?.error) msg = j.error;
-        } catch {}
-        throw new Error(msg);
-      }
-
-      const data = await res.json();
-      const url = data?.hostedInvoiceUrl || data?.url;
-      if (url) {
-        // Send them to the hosted invoice. Booking already exists in Account.
-        window.location.href = url;
-      } else {
-        throw new Error("Hosted invoice URL missing.");
-      }
-    } catch (err: any) {
-      alert(err?.message || "Booking failed.");
+    const data = await res.json();
+    if (data?.url) {
+      window.location.href = data.url;
+    } else {
+      alert("Checkout URL missing.");
     }
   }
 
@@ -604,23 +466,13 @@ export default function BookingPage() {
             </button>
 
             {quoteReady && (
-              <>
-                <button
-                  onClick={handlePayNow}
-                  className="px-6 py-2 rounded font-semibold"
-                  style={{ backgroundColor: JETSET_NAVY, color: "#fff" }}
-                >
-                  Confirm Booking — Pay Now
-                </button>
-
-                <button
-                  onClick={handlePayLater}
-                  className="px-6 py-2 rounded font-semibold border"
-                  style={{ backgroundColor: "#e5e7eb", color: "#374151", borderColor: "#cbd5e1" }}
-                >
-                  Book Now — Pay Later
-                </button>
-              </>
+              <button
+                onClick={handleBookNow}
+                className="px-6 py-2 rounded font-semibold"
+                style={{ backgroundColor: JETSET_NAVY, color: "#fff" }}
+              >
+                Confirm Booking
+              </button>
             )}
           </div>
         </section>

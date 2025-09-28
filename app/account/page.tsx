@@ -14,6 +14,7 @@ type Invoice = {
   id: string;
   status: string;
   amountDue: number;
+  hostedUrl?: string | null; // show View/Pay link if provided
 };
 
 type Booking = {
@@ -24,8 +25,9 @@ type Booking = {
   terminal: string | null;
   scheduledAt: string;
   priceCents: number;
-  status: string;
+  status: string; // "UNPAID" | "PAID" | "PENDING" | "CANCELLED"
   invoice?: Invoice | null;
+  receiptUrl?: string | null;
 };
 
 type Address = {
@@ -47,7 +49,7 @@ export default function AccountPage() {
 
   // Add address form state
   const [newLabel, setNewLabel] = useState("");
-  const [newLine1, setNewLine1] = useState("");
+  the [newLine1, setNewLine1] = useState("");
   const [savingAddress, setSavingAddress] = useState(false);
 
   useEffect(() => {
@@ -128,6 +130,22 @@ export default function AccountPage() {
     }
   }
 
+  // little helper for colored status badge
+  function StatusBadge({ value }: { value: string }) {
+    const v = value?.toUpperCase();
+    const cls =
+      v === "PAID"
+        ? "bg-green-100 text-green-700"
+        : v === "CANCELLED"
+        ? "bg-red-100 text-red-700"
+        : "bg-yellow-100 text-yellow-700"; // UNPAID or PENDING
+    return (
+      <span className={`inline-block rounded px-2 py-0.5 text-xs font-semibold ${cls}`}>
+        {v}
+      </span>
+    );
+  }
+
   return (
     <div className="p-8 space-y-10 max-w-4xl mx-auto">
       <h1 className="text-2xl font-bold">My Account</h1>
@@ -164,39 +182,59 @@ export default function AccountPage() {
                 {new Date(b.scheduledAt).toLocaleString()} — $
                 {(b.priceCents / 100).toFixed(2)}
               </p>
-              <p
-                className={`text-sm font-semibold ${
-                  isCancelled ? "text-red-600" : ""
-                }`}
-              >
-                Status: {b.status}
-              </p>
+
+              {/* Booking status (PAID / UNPAID / PENDING / CANCELLED) */}
+              <div className="mt-1">
+                <StatusBadge value={b.status} />
+                {b.receiptUrl && b.status?.toUpperCase() === "PAID" && (
+                  <a
+                    href={b.receiptUrl}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="ml-2 text-blue-600 underline"
+                  >
+                    Receipt
+                  </a>
+                )}
+              </div>
 
               {/* Invoice details */}
-              {b.invoice ? (
-                <div className="text-sm mt-1">
-                  <p>
-                    Invoice:{" "}
-                    <span
-                      className={
-                        b.invoice.status === "PAID"
-                          ? "text-green-600 font-bold"
-                          : b.invoice.status === "FAILED"
-                          ? "text-red-600 font-bold"
-                          : "text-yellow-600 font-bold"
-                      }
-                    >
-                      {b.invoice.status}
-                    </span>
-                  </p>
-                  <p>Amount: ${(b.invoice.amountDue / 100).toFixed(2)}</p>
-                </div>
-              ) : (
-                <p className="text-sm text-gray-500">No invoice yet</p>
-              )}
+              <div className="text-sm mt-2">
+                {b.invoice ? (
+                  <>
+                    <p>
+                      Invoice:{" "}
+                      <span
+                        className={
+                          b.invoice.status === "PAID"
+                            ? "text-green-600 font-bold"
+                            : b.invoice.status === "FAILED"
+                            ? "text-red-600 font-bold"
+                            : "text-yellow-600 font-bold"
+                        }
+                      >
+                        {b.invoice.status}
+                      </span>{" "}
+                      — Amount: ${(b.invoice.amountDue / 100).toFixed(2)}
+                    </p>
+                    {b.invoice.hostedUrl && b.status?.toUpperCase() !== "PAID" && (
+                      <a
+                        href={b.invoice.hostedUrl}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="text-blue-600 underline"
+                      >
+                        View / Pay Invoice
+                      </a>
+                    )}
+                  </>
+                ) : (
+                  <p className="text-gray-500">No invoice yet</p>
+                )}
+              </div>
 
               {!isCancelled && (
-                <div className="space-x-2 mt-1">
+                <div className="space-x-2 mt-2">
                   <Link
                     href={`/booking?modify=${b.id}`}
                     className="rounded bg-yellow-500 px-2 py-1 text-white hover:opacity-90"

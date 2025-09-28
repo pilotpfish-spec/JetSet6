@@ -76,7 +76,7 @@ model Booking {
 }
 
 model Address {
-  id         String   @id
+  id         String   @id @default(cuid())
   userId     String
   label      String
   line1      String
